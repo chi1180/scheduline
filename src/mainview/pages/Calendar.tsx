@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
-import { DayColumn } from "../components/Calendar/DayColumn";
+import { CanvasCalendarGrid } from "../components/Calendar/CanvasCalendarGrid";
+import { MAX_HOUR, TIME_SLOTS } from "../components/Calendar/timeGrid";
 import { indexDBAPI } from "../utils/indexDBAPI";
 
 const DAYS_OF_WEEK = [
@@ -13,13 +14,6 @@ const DAYS_OF_WEEK = [
   "Friday",
   "Saturday",
 ];
-
-const MIN_HOUR = 5;
-const MAX_HOUR = 22;
-const EVENT_HOURS = Array.from(
-  { length: (MAX_HOUR - MIN_HOUR) * 2 + 1 },
-  (_, i) => MIN_HOUR + i * 0.5,
-);
 
 const formatHour = (h: number) => {
   const hour = Math.floor(h);
@@ -254,6 +248,26 @@ export default function Calendar() {
     creatingEvent,
   ]);
 
+  // Canvas interaction handlers
+  const handleCanvasSelectDay = (dayIndex: number) => {
+    setFocusedDay(dayIndex);
+    setDaySelected(true);
+    setSelectedEventId(undefined);
+  };
+
+  const handleCanvasSelectEvent = (eventId: string, dayIndex: number) => {
+    setFocusedDay(dayIndex);
+    setDaySelected(true);
+    setSelectedEventId(eventId);
+  };
+
+  const handleCanvasSlotClick = (dayIndex: number, hour: number) => {
+    setFocusedDay(dayIndex);
+    setDaySelected(true);
+    setSelectedEventId(undefined);
+    setSelectedSlot({ day: dayIndex, hour });
+  };
+
   const addEvent = async () => {
     if (!selectedSlot || !eventTitle.trim()) return;
 
@@ -314,16 +328,93 @@ export default function Calendar() {
   };
 
   const deleteEvent = async (id: string) => {
+    // Determine which event (if any) to focus after deletion
+    const dayEvents = events
+      .filter((ev) => ev.day === focusedDay)
+      .sort((a, b) => a.startHour - b.startHour);
+    const deletedIndex = dayEvents.findIndex((ev) => ev.id === id);
+    const remaining = dayEvents.filter((ev) => ev.id !== id);
+    const nextId =
+      remaining.length > 0
+        ? remaining[Math.min(deletedIndex, remaining.length - 1)].id
+        : undefined;
+
     try {
       await indexDBAPI.delete("events", id);
       setEvents(events.filter((e) => e.id !== id));
-      setSelectedEventId(undefined);
+      setSelectedEventId(nextId);
+      setDaySelected(true);
       toast.success("Event deleted successfully");
     } catch (error) {
       console.error("Failed to delete event:", error);
       setEvents(events.filter((e) => e.id !== id));
-      setSelectedEventId(undefined);
+      setSelectedEventId(nextId);
+      setDaySelected(true);
       toast.success("Event deleted successfully");
+    }
+  };
+
+  // Import
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const importEvents = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed: unknown = JSON.parse(text);
+
+      if (!Array.isArray(parsed)) {
+        toast.error("Invalid file: expected a JSON array");
+        return;
+      }
+
+      const valid: CalendarEvent[] = [];
+      const invalid: number[] = [];
+
+      (parsed as unknown[]).forEach((item, i) => {
+        if (
+          item !== null &&
+          typeof item === "object" &&
+          typeof (item as Record<string, unknown>).title === "string" &&
+          typeof (item as Record<string, unknown>).day === "number" &&
+          typeof (item as Record<string, unknown>).startHour === "number" &&
+          typeof (item as Record<string, unknown>).duration === "number"
+        ) {
+          const ev = item as Record<string, unknown>;
+          valid.push({
+            id: `imported-${Date.now()}-${i}`,
+            day: Math.max(0, Math.min(6, Math.round(ev.day as number))),
+            startHour: ev.startHour as number,
+            duration: Math.max(0.5, ev.duration as number),
+            title: (ev.title as string).trim() || "(no title)",
+            color: typeof ev.color === "string" ? ev.color : "bg-indigo-500",
+          });
+        } else {
+          invalid.push(i);
+        }
+      });
+
+      if (valid.length === 0) {
+        toast.error("No valid events found in file");
+        return;
+      }
+
+      // Persist each imported event to IndexDB
+      for (const ev of valid) {
+        try {
+          await indexDBAPI.create("events", ev);
+        } catch {
+          // ignore individual write errors
+        }
+      }
+
+      setEvents((prev) => [...prev, ...valid]);
+
+      const skipped = invalid.length > 0 ? ` (${invalid.length} skipped)` : "";
+      toast.success(
+        `Imported ${valid.length} event${valid.length !== 1 ? "s" : ""}${skipped}`,
+      );
+    } catch {
+      toast.error("Failed to parse JSON file");
     }
   };
 
@@ -453,46 +544,17 @@ export default function Calendar() {
         />
       )}
 
-      {/* Hour Headers */}
-      <div className="overflow-x-auto pb-4">
-        <div className="flex">
-          <div className="w-29 flex-shrink-0" />
-          <div className="flex gap-0">
-            {Array.from({ length: 36 }, (_, i) => MIN_HOUR + i * 0.5).map(
-              (slot) =>
-                slot % 1 === 0 && (
-                  <div
-                    key={slot}
-                    className={
-                      "w-20 flex-shrink-0 text-center font-semibold text-slate-400 text-xs py-2 border-b border-slate-700"
-                    }
-                  >
-                    {`${String(Math.floor(slot)).padStart(2, "0")}:00`}
-                  </div>
-                ),
-            )}
-          </div>
-        </div>
-
-        {/* Days Grid */}
-        <div>
-          {DAYS_OF_WEEK.map((day, dayIndex) => (
-            <DayColumn
-              key={day}
-              dayName={day}
-              dayIndex={dayIndex}
-              events={events}
-              isFocused={focusedDay === dayIndex}
-              daySelected={daySelected && focusedDay === dayIndex}
-              selectedEventId={
-                daySelected && focusedDay === dayIndex
-                  ? selectedEventId
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      </div>
+      {/* Canvas Calendar Grid */}
+      <CanvasCalendarGrid
+        days={DAYS_OF_WEEK}
+        events={events}
+        focusedDay={focusedDay}
+        daySelected={daySelected}
+        selectedEventId={daySelected ? selectedEventId : undefined}
+        onSelectDay={handleCanvasSelectDay}
+        onSelectEvent={handleCanvasSelectEvent}
+        onSlotClick={handleCanvasSlotClick}
+      />
 
       {/* Info */}
       <div className="mt-6 p-4 bg-slate-900 border border-slate-700">
@@ -510,24 +572,45 @@ export default function Calendar() {
         </div>
       </div>
 
-      {/* Export Section */}
+      {/* Import / Export Section */}
       <div className="mt-4 p-4 bg-slate-900 border border-slate-700">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-semibold text-white mb-1">
-              Export Events
+              Import / Export
             </h3>
             <p className="text-xs text-slate-400">
-              Download all events as JSON file
+              Import merges with existing events. Export saves all as JSON.
             </p>
           </div>
-          <button
-            onClick={() => exportEvents(events)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
-          >
-            Export JSON
-          </button>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors"
+            >
+              Import JSON
+            </button>
+            <button
+              onClick={() => exportEvents(events)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+            >
+              Export JSON
+            </button>
+          </div>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              importEvents(file);
+              e.target.value = "";
+            }
+          }}
+        />
       </div>
     </div>
   );
@@ -707,7 +790,7 @@ function CreateEventModal({
                 onKeyPress={handleKeyPress}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
               >
-                {EVENT_HOURS.map((h) => (
+                {TIME_SLOTS.map((h) => (
                   <option key={h} value={h}>
                     {formatHour(h)}
                   </option>
@@ -726,7 +809,15 @@ function CreateEventModal({
               onKeyPress={handleKeyPress}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
             >
-              {Array.from({ length: 16 }, (_, i) => (i + 1) * 0.5).map((d) => (
+              {Array.from(
+                {
+                  length: Math.max(
+                    1,
+                    Math.floor((MAX_HOUR - selectedHour) / 0.5),
+                  ),
+                },
+                (_, i) => (i + 1) * 0.5,
+              ).map((d) => (
                 <option key={d} value={d}>
                   {d === 0.5 ? "30 min" : `${d} hour${d > 1 ? "s" : ""}`}
                 </option>
@@ -845,7 +936,7 @@ function EditEventModal({
                 onKeyPress={handleKeyPress}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
               >
-                {EVENT_HOURS.map((h) => (
+                {TIME_SLOTS.map((h) => (
                   <option key={h} value={h}>
                     {formatHour(h)}
                   </option>
@@ -864,7 +955,10 @@ function EditEventModal({
               onKeyPress={handleKeyPress}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
             >
-              {Array.from({ length: 16 }, (_, i) => (i + 1) * 0.5).map((d) => (
+              {Array.from(
+                { length: Math.max(1, Math.floor((MAX_HOUR - hour) / 0.5)) },
+                (_, i) => (i + 1) * 0.5,
+              ).map((d) => (
                 <option key={d} value={d}>
                   {d === 0.5 ? "30 min" : `${d} hour${d > 1 ? "s" : ""}`}
                 </option>

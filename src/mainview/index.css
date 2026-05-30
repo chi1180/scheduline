@@ -69,6 +69,35 @@
   --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+@layer components {
+  /* Select/Selector Styling */
+  select {
+    @apply w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white transition-colors duration-200;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23cbd5e1' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 32px;
+  }
+
+  select:hover {
+    @apply border-slate-500;
+  }
+
+  select:focus {
+    @apply outline-none border-indigo-500;
+  }
+
+  /* Options styling */
+  option {
+    @apply bg-slate-800 text-white;
+  }
+
+  option:checked {
+    @apply bg-indigo-600;
+  }
+}
+
 @layer utilities {
   /* Dark theme only utilities */
   .bg-app-light {
