@@ -374,13 +374,13 @@ export default function Today() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto h-[calc(100vh-6rem)] overflow-hidden">
+    <div className="max-w-6xl mx-auto h-[calc(100vh-6rem)] flex flex-col overflow-hidden">
       <p className="text-center text-app-secondary">
         Write you mind as a <strong>note</strong>, as a <strong>keep</strong>,
         as a foot print of your <strong>efforts</strong>_
       </p>
 
-      <div className="mt-6 flex h-[calc(100%-2.5rem)] gap-4 overflow-hidden">
+      <div className="mt-6 flex flex-1 min-h-0 gap-4 overflow-hidden">
         <section className="flex flex-[1] min-h-0 flex-col border border-slate-700 bg-slate-900">
           <div className="border-b border-slate-700 px-4 py-3">
             <div className="flex items-start justify-between gap-4">
@@ -532,7 +532,7 @@ export default function Today() {
         </section>
       </div>
 
-      <div className="mt-4 border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-300">
+      <div className="mt-4 shrink-0 border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-300">
         <strong>Keyboard:</strong> t focus timeline, enter focus note, j/k move
         timeline event, n focus note, esc return to timeline
       </div>
