@@ -205,7 +205,7 @@ export default function Calendar() {
               };
               updateEvent(updated);
             }
-            setTimeAdjustMode(false);
+            // keep timeAdjustMode true so multiple h/l presses can repeatedly extend
             return;
           } else if (e.key === "l" || e.key === "L") {
             e.preventDefault();
@@ -228,7 +228,7 @@ export default function Calendar() {
               };
               updateEvent(updated);
             }
-            setTimeAdjustMode(false);
+            // keep timeAdjustMode true so multiple h/l presses can repeatedly extend
             return;
           } else {
             // any other key cancels the time adjust mode
@@ -276,10 +276,10 @@ export default function Calendar() {
             updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
           }
         } else if (e.key === "l" || e.key === "L") {
-          // move event later by 3 minutes with bounding
+          // move event later by 30 minutes with bounding
           e.preventDefault();
           const ev = currentEvent;
-          const delta = 3 / 60; // 3 minutes in hours
+          const delta = 0.5; // 30 minutes in hours
           let newStart = ev.startHour + delta;
           const maxStart = MAX_HOUR - ev.duration;
           if (newStart > maxStart) newStart = maxStart;
