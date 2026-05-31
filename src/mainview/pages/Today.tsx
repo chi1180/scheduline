@@ -82,12 +82,19 @@ export default function Today() {
     const init = async () => {
       setIsLoading(true);
       try {
+        console.log("[Today] init start");
         await indexDBAPI.init(DB_CONFIG);
+        console.log("[Today] db init ok");
         const savedEvents = await indexDBAPI.readAll<CalendarEvent>("events");
+        console.log("[Today] events loaded", {
+          count: savedEvents.length,
+          ids: savedEvents.map((event) => event.id),
+        });
         setEvents(savedEvents);
       } catch (error) {
-        console.error("Failed to initialize Today page:", error);
+        console.error("[Today] failed to initialize or load events:", error);
       } finally {
+        console.log("[Today] init complete");
         setIsLoading(false);
       }
     };
@@ -131,16 +138,23 @@ export default function Today() {
 
   useEffect(() => {
     if (todayEvents.length === 0) {
+      console.log("[Today] no events for today", { todayIndex, todayKey });
       setSelectedEventId(undefined);
       return;
     }
 
     setSelectedEventId((prev) => {
       if (prev && todayEvents.some((event) => event.id === prev)) {
+        console.log("[Today] keep selected event", { selectedEventId: prev });
         return prev;
       }
 
       const initialEvent = getInitialEvent(todayEvents, getNowHour(now));
+      console.log("[Today] select initial event", {
+        nowHour: getNowHour(now),
+        selectedEventId: initialEvent?.id,
+        eventIds: todayEvents.map((event) => event.id),
+      });
       return initialEvent?.id;
     });
   }, [todayEvents, now]);
@@ -150,6 +164,7 @@ export default function Today() {
 
     const loadNote = async () => {
       if (!selectedEvent) {
+        console.log("[Today] note cleared - no selected event");
         setNote("");
         setSaveState("idle");
         return;
@@ -158,12 +173,22 @@ export default function Today() {
       setIsLoadingNote(true);
       try {
         const noteId = buildNoteId(todayKey, selectedEvent.id);
+        console.log("[Today] load note", {
+          noteId,
+          eventId: selectedEvent.id,
+          date: todayKey,
+        });
         const record = await indexDBAPI.read<TodayNoteRecord>("today-notes", noteId);
+        console.log("[Today] note loaded", {
+          noteId,
+          found: !!record,
+          contentLength: record?.content.length ?? 0,
+        });
         if (cancelled) return;
         setNote(record?.content ?? "");
         setSaveState("idle");
       } catch (error) {
-        console.error("Failed to load note:", error);
+        console.error("[Today] failed to load note:", error);
         if (!cancelled) {
           setNote("");
           setSaveState("error");
@@ -193,6 +218,11 @@ export default function Today() {
         content,
         updatedAt: new Date().toISOString(),
       };
+      console.log("[Today] save note", {
+        noteId: record.id,
+        eventId: event.id,
+        contentLength: content.length,
+      });
       const existing = await indexDBAPI.read<TodayNoteRecord>(
         "today-notes",
         record.id,
