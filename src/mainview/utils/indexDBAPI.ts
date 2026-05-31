@@ -43,6 +43,12 @@ class IndexDBAPI {
    * @param config データベース設定
    */
   async init(config: IDBConfig): Promise<IDBDatabase> {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+      this.config = null;
+    }
+
     const openDatabase = (version?: number) =>
       new Promise<IDBDatabase>((resolve, reject) => {
         const request =
@@ -89,7 +95,7 @@ class IndexDBAPI {
       db = await openDatabase();
     }
 
-    let missingStores = config.stores.filter(
+    const missingStores = config.stores.filter(
       (store) => !db.objectStoreNames.contains(store.name),
     );
 
