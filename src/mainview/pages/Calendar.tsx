@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import { CanvasCalendarGrid } from "../components/Calendar/CanvasCalendarGrid";
-import { MIN_HOUR, MAX_HOUR, TIME_SLOTS } from "../components/Calendar/timeGrid";
+import {
+  MIN_HOUR,
+  MAX_HOUR,
+  TIME_SLOTS,
+} from "../components/Calendar/timeGrid";
 import { indexDBAPI } from "../utils/indexDBAPI";
 
 const DAYS_OF_WEEK = [
@@ -199,10 +203,18 @@ export default function Calendar() {
           // t + h : move start earlier by 30min (expand to earlier), keep end fixed
           if (key === "h") {
             const desiredStart = Math.round((ev.startHour - 0.5) * 100) / 100;
-            const newStart = Math.max(prevEnd, Math.max(MIN_HOUR, desiredStart));
-            const newDuration = Math.round(((ev.startHour + ev.duration) - newStart) * 100) / 100;
+            const newStart = Math.max(
+              prevEnd,
+              Math.max(MIN_HOUR, desiredStart),
+            );
+            const newDuration =
+              Math.round((ev.startHour + ev.duration - newStart) * 100) / 100;
             if (newDuration >= 0.5) {
-              updateEvent({ ...ev, startHour: newStart, duration: newDuration });
+              updateEvent({
+                ...ev,
+                startHour: newStart,
+                duration: newDuration,
+              });
             }
             return;
           }
@@ -218,7 +230,8 @@ export default function Calendar() {
               }
               return nStart;
             })();
-            const desiredEnd = Math.round((ev.startHour + ev.duration + 0.5) * 100) / 100;
+            const desiredEnd =
+              Math.round((ev.startHour + ev.duration + 0.5) * 100) / 100;
             const newEnd = Math.min(nextStart, Math.min(MAX_HOUR, desiredEnd));
             const newDuration = Math.round((newEnd - ev.startHour) * 100) / 100;
             if (newDuration >= 0.5) {
@@ -257,17 +270,26 @@ export default function Calendar() {
             let newStart = Math.max(desiredStart, prevEnd);
             // ensure not past end - 0.5
             const endTime = ev.startHour + ev.duration;
-            if (newStart > endTime - 0.5) newStart = Math.max(prevEnd, Math.round((endTime - 0.5) * 100) / 100);
+            if (newStart > endTime - 0.5)
+              newStart = Math.max(
+                prevEnd,
+                Math.round((endTime - 0.5) * 100) / 100,
+              );
             const newDuration = Math.round((endTime - newStart) * 100) / 100;
             if (newDuration >= 0.5) {
-              updateEvent({ ...ev, startHour: newStart, duration: newDuration });
+              updateEvent({
+                ...ev,
+                startHour: newStart,
+                duration: newDuration,
+              });
             }
             return;
           }
 
           // s + l : move end earlier by 30min (shrink from end), keep start fixed
           if (key === "l") {
-            const desiredEnd = Math.round((ev.startHour + ev.duration - 0.5) * 100) / 100;
+            const desiredEnd =
+              Math.round((ev.startHour + ev.duration - 0.5) * 100) / 100;
             let newEnd = Math.min(desiredEnd, nextStart);
             // ensure not before start + 0.5
             if (newEnd < ev.startHour + 0.5) newEnd = ev.startHour + 0.5;
@@ -298,8 +320,8 @@ export default function Calendar() {
             if (newStart === currentEvent.startHour) {
               toast.error("Cannot extend earlier (boundary or conflict)");
             } else {
-              const newDuration = currentEvent.duration +
-                (currentEvent.startHour - newStart);
+              const newDuration =
+                currentEvent.duration + (currentEvent.startHour - newStart);
               const updated = {
                 ...currentEvent,
                 startHour: newStart,
@@ -312,7 +334,8 @@ export default function Calendar() {
           } else if (e.key === "l" || e.key === "L") {
             e.preventDefault();
             // extend later by up to 0.5 hours, bounded by MAX_HOUR and next events
-            const desiredEnd = currentEvent.startHour + currentEvent.duration + 0.5;
+            const desiredEnd =
+              currentEvent.startHour + currentEvent.duration + 0.5;
             const endLimit = MAX_HOUR;
             let earliestNextStart = endLimit;
             for (const ev of dayEvents) {
@@ -323,7 +346,8 @@ export default function Calendar() {
             if (newEnd === currentEvent.startHour + currentEvent.duration) {
               toast.error("Cannot extend later (boundary or conflict)");
             } else {
-              const newDuration = Math.round((newEnd - currentEvent.startHour) * 100) / 100;
+              const newDuration =
+                Math.round((newEnd - currentEvent.startHour) * 100) / 100;
               const updated = {
                 ...currentEvent,
                 duration: newDuration,
@@ -403,11 +427,15 @@ export default function Calendar() {
           const conflicts = events.filter(
             (o) =>
               o.day === targetDay &&
-              !(o.startHour + o.duration <= ev.startHour ||
-                o.startHour >= ev.startHour + ev.duration),
+              !(
+                o.startHour + o.duration <= ev.startHour ||
+                o.startHour >= ev.startHour + ev.duration
+              ),
           );
           if (conflicts.length > 0) {
-            toast.error("Cannot move to next day: time conflict with existing event");
+            toast.error(
+              "Cannot move to next day: time conflict with existing event",
+            );
           } else {
             updateEvent({ ...ev, day: targetDay });
             // keep selection on moved event
@@ -418,15 +446,20 @@ export default function Calendar() {
           // move to previous weekday
           e.preventDefault();
           const ev = currentEvent;
-          const targetDay = ev.day - 1 < 0 ? DAYS_OF_WEEK.length - 1 : ev.day - 1;
+          const targetDay =
+            ev.day - 1 < 0 ? DAYS_OF_WEEK.length - 1 : ev.day - 1;
           const conflicts = events.filter(
             (o) =>
               o.day === targetDay &&
-              !(o.startHour + o.duration <= ev.startHour ||
-                o.startHour >= ev.startHour + ev.duration),
+              !(
+                o.startHour + o.duration <= ev.startHour ||
+                o.startHour >= ev.startHour + ev.duration
+              ),
           );
           if (conflicts.length > 0) {
-            toast.error("Cannot move to previous day: time conflict with existing event");
+            toast.error(
+              "Cannot move to previous day: time conflict with existing event",
+            );
           } else {
             updateEvent({ ...ev, day: targetDay });
             setFocusedDay(targetDay);
@@ -458,10 +491,10 @@ export default function Calendar() {
       }
 
       // Day navigation mode
-      if (e.key === "ArrowDown") {
+      if (e.key === "j" || e.key === "J") {
         e.preventDefault();
         setFocusedDay((prev) => (prev + 1) % DAYS_OF_WEEK.length);
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "k" || e.key === "K") {
         e.preventDefault();
         setFocusedDay((prev) =>
           prev - 1 < 0 ? DAYS_OF_WEEK.length - 1 : prev - 1,
@@ -536,13 +569,11 @@ export default function Calendar() {
       setEvents([...events, newEvent]);
       setEventTitle("");
       setSelectedSlot(null);
-
     } catch (error) {
       console.error("Failed to create event:", error);
       setEvents([...events, newEvent]);
       setEventTitle("");
       setSelectedSlot(null);
-
     }
   };
 
@@ -568,13 +599,11 @@ export default function Calendar() {
       setEvents([...events, newEvent]);
       setLastCreatedEventId(newEvent.id);
       setCreatingEvent(null);
-
     } catch (error) {
       console.error("Failed to create event:", error);
       setEvents([...events, newEvent]);
       setLastCreatedEventId(newEvent.id);
       setCreatingEvent(null);
-
     }
   };
 
@@ -595,13 +624,11 @@ export default function Calendar() {
       setEvents(events.filter((e) => e.id !== id));
       setSelectedEventId(nextId);
       setDaySelected(true);
-
     } catch (error) {
       console.error("Failed to delete event:", error);
       setEvents(events.filter((e) => e.id !== id));
       setSelectedEventId(nextId);
       setDaySelected(true);
-
     }
   };
 
@@ -661,7 +688,6 @@ export default function Calendar() {
       setEvents((prev) => [...prev, ...valid]);
 
       const skipped = invalid.length > 0 ? ` (${invalid.length} skipped)` : "";
-
     } catch {
       toast.error("Failed to parse JSON file");
     }
@@ -674,14 +700,12 @@ export default function Calendar() {
         events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)),
       );
       setEditingDayIndex(null);
-
     } catch (error) {
       console.error("Failed to update event:", error);
       setEvents(
         events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)),
       );
       setEditingDayIndex(null);
-
     }
   };
 
@@ -695,50 +719,6 @@ export default function Calendar() {
 
   return (
     <div className="max-w-full mx-auto">
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: "rgb(30, 27, 75)",
-            color: "#fff",
-            border: "1px solid rgb(79, 70, 229)",
-            borderRadius: "0",
-            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
-            padding: "16px",
-            fontSize: "14px",
-            fontWeight: "500",
-          },
-          success: {
-            style: {
-              background: "rgb(30, 27, 75)",
-              color: "#fff",
-              border: "1px solid rgb(79, 70, 229)",
-            },
-            iconTheme: {
-              primary: "rgb(99, 102, 241)",
-              secondary: "rgb(30, 27, 75)",
-            },
-          },
-          error: {
-            style: {
-              background: "rgb(30, 27, 75)",
-              color: "#fff",
-              border: "1px solid rgb(220, 38, 38)",
-            },
-            iconTheme: {
-              primary: "rgb(220, 38, 38)",
-              secondary: "rgb(30, 27, 75)",
-            },
-          },
-        }}
-      />
-
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white">Calendar</h2>
-      </div>
-
       {/* Add Event Modal (from hour click) */}
       {selectedSlot && (
         <AddEventModal
@@ -809,10 +789,13 @@ export default function Calendar() {
       <div className="mt-6 p-4 bg-slate-900 border border-slate-700">
         <div className="text-sm text-slate-300 space-y-1">
           <p>
-            <strong>Keyboard:</strong> ↑/↓ days, Enter select, n new, space edit, d delete, h -30min, l +3min, j next day, k prev day, t then h/l extend by 30min
+            <strong>Keyboard:</strong> j/k days, Enter select, n new, space
+            edit, d delete, h -30min, l +30min, j/k selected event day move,
+            t+s/h/l adjust time
           </p>
           <p className="text-slate-400 text-xs mt-2">
-            Arrow keys navigate events, Esc to go back. On moving/creating events, conflicts with existing events will be reported.
+            Arrow keys navigate events, Esc to go back. On moving/creating
+            events, conflicts with existing events will be reported.
           </p>
           <p className="text-slate-400 text-xs mt-2">
             {events.length} event{events.length !== 1 ? "s" : ""} scheduled
