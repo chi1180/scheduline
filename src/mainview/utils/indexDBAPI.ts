@@ -43,46 +43,55 @@ class IndexDBAPI {
    * @param config データベース設定
    */
   async init(config: IDBConfig): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(config.dbName, config.version);
+    const openDatabase = (version: number) =>
+      new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(config.dbName, version);
 
-      request.onerror = () => {
-        reject(new Error(`IndexDB初期化エラー: ${request.error}`));
-      };
+        request.onerror = () => {
+          reject(new Error(`IndexDB初期化エラー: ${request.error}`));
+        };
 
-      request.onsuccess = () => {
-        this.db = request.result;
-        this.config = config;
-        resolve(this.db);
-      };
+        request.onupgradeneeded = () => {
+          const db = request.result;
 
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
+          // 既存データを保持したまま、足りないストアだけ追加する
+          config.stores.forEach((store) => {
+            if (db.objectStoreNames.contains(store.name)) return;
 
-        // 既存のオブジェクトストアを削除
-        for (let i = db.objectStoreNames.length - 1; i >= 0; i--) {
-          const storeName = db.objectStoreNames[i];
-          if (db.objectStoreNames.contains(storeName)) {
-            db.deleteObjectStore(storeName);
-          }
-        }
-
-        // 新しいオブジェクトストアを作成
-        config.stores.forEach((store) => {
-          const objectStore = db.createObjectStore(store.name, {
-            keyPath: store.keyPath,
-            autoIncrement: false,
-          });
-
-          // インデックスを作成
-          if (store.indexes) {
-            store.indexes.forEach((index) => {
-              objectStore.createIndex(index.name, index.keyPath, index.options);
+            const objectStore = db.createObjectStore(store.name, {
+              keyPath: store.keyPath,
+              autoIncrement: false,
             });
-          }
-        });
-      };
-    });
+
+            if (store.indexes) {
+              store.indexes.forEach((index) => {
+                objectStore.createIndex(index.name, index.keyPath, index.options);
+              });
+            }
+          });
+        };
+
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+      });
+
+    const db = await openDatabase(config.version);
+    const missingStores = config.stores.filter(
+      (store) => !db.objectStoreNames.contains(store.name),
+    );
+
+    if (missingStores.length === 0) {
+      this.db = db;
+      this.config = config;
+      return db;
+    }
+
+    db.close();
+    const upgradedDb = await openDatabase(db.version + 1);
+    this.db = upgradedDb;
+    this.config = config;
+    return upgradedDb;
   }
 
   /**

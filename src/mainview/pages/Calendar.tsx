@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import { CanvasCalendarGrid } from "../components/Calendar/CanvasCalendarGrid";
 import { MIN_HOUR, MAX_HOUR } from "../components/Calendar/timeGrid";
