@@ -76,6 +76,7 @@ const TIMELINE_LABEL_WIDTH = 72;
 export default function Today() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
+  const [focusMode, setFocusMode] = useState<"timeline" | "note" | null>(null);
   const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
@@ -85,6 +86,8 @@ export default function Today() {
   const [now, setNow] = useState(() => new Date());
   const timelineBodyRef = useRef<HTMLDivElement>(null);
   const [timelineBodyHeight, setTimelineBodyHeight] = useState(0);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  const eventRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   useEffect(() => {
     const init = async () => {
@@ -147,6 +150,18 @@ export default function Today() {
     [todayEvents, selectedEventId],
   );
 
+  const focusTimeline = () => {
+    setFocusMode("timeline");
+    if (!selectedEventId && todayEvents[0]) {
+      setSelectedEventId(todayEvents[0].id);
+    }
+  };
+
+  const focusNote = () => {
+    setFocusMode("note");
+    window.setTimeout(() => noteRef.current?.focus(), 0);
+  };
+
   useEffect(() => {
     if (todayEvents.length === 0) {
       console.log("[Today] no events for today", { todayIndex, todayKey });
@@ -169,6 +184,60 @@ export default function Today() {
       return initialEvent?.id;
     });
   }, [todayEvents, now]);
+
+  useEffect(() => {
+    if (focusMode === "timeline" && selectedEventId) {
+      window.setTimeout(() => eventRefs.current[selectedEventId]?.focus(), 0);
+    }
+  }, [focusMode, selectedEventId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const isNoteFocused = activeElement === noteRef.current;
+
+      if (isNoteFocused) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          noteRef.current?.blur();
+          setFocusMode(null);
+        }
+        return;
+      }
+
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        focusTimeline();
+        return;
+      }
+
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        focusNote();
+        return;
+      }
+
+      if (focusMode === "timeline" && selectedEventId) {
+        const currentIndex = todayEvents.findIndex(
+          (event) => event.id === selectedEventId,
+        );
+        if (e.key === "j" || e.key === "J") {
+          e.preventDefault();
+          if (currentIndex < todayEvents.length - 1) {
+            setSelectedEventId(todayEvents[currentIndex + 1].id);
+          }
+        } else if (e.key === "k" || e.key === "K") {
+          e.preventDefault();
+          if (currentIndex > 0) {
+            setSelectedEventId(todayEvents[currentIndex - 1].id);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusMode, selectedEventId, todayEvents]);
 
   useEffect(() => {
     let cancelled = false;
@@ -373,8 +442,15 @@ export default function Today() {
                   <button
                     key={event.id}
                     type="button"
-                    onClick={() => setSelectedEventId(event.id)}
-                    className={`absolute left-2 right-2 rounded px-3 py-2 text-left ${
+                    ref={(el) => {
+                      eventRefs.current[event.id] = el;
+                    }}
+                    onClick={() => {
+                      setSelectedEventId(event.id);
+                      setFocusMode("timeline");
+                    }}
+                    onFocus={() => setFocusMode("timeline")}
+                    className={`absolute left-2 right-2 px-3 py-2 text-left ${
                       selectedEventId === event.id
                         ? "border border-indigo-500 bg-indigo-950/60 shadow-lg shadow-indigo-950/30"
                         : "border border-slate-700 bg-slate-800/80 hover:border-indigo-500 hover:bg-slate-800"
@@ -423,9 +499,16 @@ export default function Today() {
           </div>
 
           <textarea
+            ref={noteRef}
             value={note}
             onChange={(e) => handleNoteChange(e.target.value)}
             disabled={!selectedEvent}
+            onFocus={() => setFocusMode("note")}
+            onBlur={() => {
+              if (focusMode === "note") {
+                setFocusMode(null);
+              }
+            }}
             placeholder="Write today's note here..."
             className="flex-1 min-h-0 w-full resize-none border border-slate-700 bg-slate-950 px-4 py-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
           />
@@ -440,6 +523,11 @@ export default function Today() {
                   : "Saved"}
           </div>
         </section>
+      </div>
+
+      <div className="mt-4 border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-300">
+        <strong>Keyboard:</strong> t focus timeline, j/k move timeline event,
+        n focus note, esc blur note
       </div>
     </div>
   );
