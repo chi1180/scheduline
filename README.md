@@ -1,3 +1,7 @@
+<div align="center">
+<img src="https://github.com/chi1180/scheduline/blob/main/assets/icon.png?raw=true" width="320px">
+</div>
+
 # Scheduline
 
 Scheduline is a desktop scheduling app for planning your day with a calendar and a Today view.
@@ -13,7 +17,12 @@ Scheduline is a desktop scheduling app for planning your day with a calendar and
 ## Main screens
 
 - **Calendar**: week view for creating, selecting, moving, and editing events
+
+![Calendar](./assets/calendar.png)
+
 - **Today**: focused day view with a timeline and a note editor
+
+![Today](./assets/today.png)
 
 ## Running the app
 
