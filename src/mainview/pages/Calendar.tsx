@@ -317,9 +317,7 @@ export default function Calendar() {
               );
             }
             const newStart = Math.max(latestAllowedStart, desiredStart);
-            if (newStart === currentEvent.startHour) {
-              toast.error("Cannot extend earlier (boundary or conflict)");
-            } else {
+            if (newStart !== currentEvent.startHour) {
               const newDuration =
                 currentEvent.duration + (currentEvent.startHour - newStart);
               const updated = {
@@ -343,9 +341,7 @@ export default function Calendar() {
               earliestNextStart = Math.min(earliestNextStart, ev.startHour);
             }
             const newEnd = Math.min(earliestNextStart, desiredEnd, endLimit);
-            if (newEnd === currentEvent.startHour + currentEvent.duration) {
-              toast.error("Cannot extend later (boundary or conflict)");
-            } else {
+            if (newEnd !== currentEvent.startHour + currentEvent.duration) {
               const newDuration =
                 Math.round((newEnd - currentEvent.startHour) * 100) / 100;
               const updated = {
@@ -396,9 +392,7 @@ export default function Calendar() {
             prevEnd = Math.max(prevEnd, o.startHour + o.duration);
           }
           if (newStart < prevEnd) newStart = prevEnd;
-          if (newStart === ev.startHour) {
-            toast.error("Cannot move earlier (boundary or conflict)");
-          } else {
+          if (newStart !== ev.startHour) {
             updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
           }
         } else if (e.key === "l" || e.key === "L") {
@@ -414,9 +408,7 @@ export default function Calendar() {
           if (next && newStart + ev.duration > next.startHour) {
             newStart = next.startHour - ev.duration;
           }
-          if (newStart === ev.startHour) {
-            toast.error("Cannot move later (boundary or conflict)");
-          } else {
+          if (newStart !== ev.startHour) {
             updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
           }
         } else if (e.key === "j" || e.key === "J") {
