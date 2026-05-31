@@ -194,6 +194,12 @@ export default function Today() {
   }, [focusMode, selectedEventId]);
 
   useEffect(() => {
+    if (selectedEventId && focusMode === null) {
+      focusTimeline();
+    }
+  }, [selectedEventId, focusMode]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
       const isNoteFocused = activeElement === noteRef.current;
@@ -204,12 +210,6 @@ export default function Today() {
           noteRef.current?.blur();
           focusTimeline();
         }
-        return;
-      }
-
-      if (e.key === "t" || e.key === "T") {
-        e.preventDefault();
-        focusTimeline();
         return;
       }
 
@@ -533,8 +533,8 @@ export default function Today() {
       </div>
 
       <div className="mt-4 shrink-0 border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-        <strong>Keyboard:</strong> t focus timeline, enter focus note, j/k move
-        timeline event, n focus note, esc return to timeline
+        <strong>Keyboard:</strong> enter focus note, j/k move timeline event,
+        n focus note, esc return to timeline
       </div>
     </div>
   );
