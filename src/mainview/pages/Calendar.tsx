@@ -333,9 +333,9 @@ export default function Calendar() {
             // keep timeAdjustMode true so multiple h/l presses can repeatedly extend
             return;
           } else {
-            // any other key cancels the time adjust mode
+            // any other key cancels the time adjust mode and allow the key to be processed normally
             setTimeAdjustMode(false);
-            return;
+            // no return here — fall through to handle the key as usual
           }
         }
 
