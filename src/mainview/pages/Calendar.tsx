@@ -2,11 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import { CanvasCalendarGrid } from "../components/Calendar/CanvasCalendarGrid";
-import {
-  MIN_HOUR,
-  MAX_HOUR,
-  TIME_SLOTS,
-} from "../components/Calendar/timeGrid";
+import { MIN_HOUR, MAX_HOUR } from "../components/Calendar/timeGrid";
 import { indexDBAPI } from "../utils/indexDBAPI";
 
 const DAYS_OF_WEEK = [
@@ -18,12 +14,6 @@ const DAYS_OF_WEEK = [
   "Friday",
   "Saturday",
 ];
-
-const formatHour = (h: number) => {
-  const hour = Math.floor(h);
-  const minute = (h - hour) * 60;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-};
 
 export interface CalendarEvent {
   id: string;
@@ -569,19 +559,15 @@ export default function Calendar() {
     }
   };
 
-  const addEventFromDialog = async (
-    title: string,
-    day: number,
-    hour: number,
-    duration: number,
-  ) => {
+  const addEventFromDialog = async (title: string) => {
+    if (!creatingEvent) return;
     if (!title.trim()) return;
 
     const newEvent: CalendarEvent = {
       id: Date.now().toString(),
-      day,
-      startHour: hour,
-      duration,
+      day: creatingEvent.day,
+      startHour: creatingEvent.hour,
+      duration: creatingEvent.duration,
       title,
       color: "bg-indigo-500",
     };
@@ -714,9 +700,6 @@ export default function Calendar() {
       {/* Add Event Modal (from hour click) */}
       {selectedSlot && (
         <AddEventModal
-          slot={selectedSlot}
-          day={DAYS_OF_WEEK[selectedSlot.day]}
-          hour={selectedSlot.hour}
           title={eventTitle}
           onTitleChange={setEventTitle}
           onSave={addEvent}
@@ -730,12 +713,7 @@ export default function Calendar() {
       {/* Create Event Modal (from [n] key) */}
       {creatingEvent && (
         <CreateEventModal
-          day={creatingEvent.day}
-          dayName={DAYS_OF_WEEK[creatingEvent.day]}
-          hour={creatingEvent.hour}
-          duration={creatingEvent.duration}
-          days={DAYS_OF_WEEK}
-          onSave={addEventFromDialog}
+          onSave={(title) => addEventFromDialog(title)}
           onCancel={() => setCreatingEvent(null)}
         />
       )}
@@ -744,8 +722,12 @@ export default function Calendar() {
       {editingDayIndex !== null && selectedEventId && (
         <EditEventModal
           event={events.find((e) => e.id === selectedEventId)!}
-          days={DAYS_OF_WEEK}
-          onSave={updateEvent}
+          onSave={(title) =>
+            updateEvent({
+              ...events.find((e) => e.id === selectedEventId)!,
+              title,
+            })
+          }
           onCancel={() => setEditingDayIndex(null)}
         />
       )}
@@ -840,9 +822,6 @@ export default function Calendar() {
 }
 
 interface AddEventModalProps {
-  slot: { day: number; hour: number };
-  day: string;
-  hour: number;
   title: string;
   onTitleChange: (title: string) => void;
   onSave: () => void;
@@ -859,31 +838,21 @@ function AddEventModal({
 }: AddEventModalProps) {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
+      e.preventDefault();
       onSave();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-slate-900 border border-slate-700 p-6 w-96 shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Add Event</h3>
-          <button
-            onClick={onCancel}
-            className="p-1 hover:bg-slate-800 transition-colors"
-          >
-            <X size={20} className="text-slate-400" />
-          </button>
-        </div>
-
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Day: {day}
-            </label>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Time: {formatHour(hour)}
-            </label>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Add Event</h3>
+            <span className="text-xs text-slate-400">Esc to cancel</span>
           </div>
 
           <div>
@@ -900,21 +869,6 @@ function AddEventModal({
               autoFocus
             />
           </div>
-
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onSave}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
-            >
-              Add Event
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -922,53 +876,39 @@ function AddEventModal({
 }
 
 interface CreateEventModalProps {
-  day: number;
-  dayName: string;
-  hour: number;
-  duration: number;
-  days: string[];
-  onSave: (title: string, day: number, hour: number, duration: number) => void;
+  onSave: (title: string) => void;
   onCancel: () => void;
 }
 
 function CreateEventModal({
-  dayName,
-  hour,
-  duration,
-  day,
-  days,
   onSave,
   onCancel,
 }: CreateEventModalProps) {
   const [title, setTitle] = useState("");
-  const [selectedDay, setSelectedDay] = useState(day);
-  const [selectedHour, setSelectedHour] = useState(hour);
-  const [selectedDuration, setSelectedDuration] = useState(duration);
 
   const handleSave = () => {
-    onSave(title, selectedDay, selectedHour, selectedDuration);
+    onSave(title);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+      e.preventDefault();
       handleSave();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-slate-900 border border-slate-700 p-6 w-96 shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Create Event</h3>
-          <button
-            onClick={onCancel}
-            className="p-1 hover:bg-slate-800 transition-colors"
-          >
-            <X size={20} className="text-slate-400" />
-          </button>
-        </div>
-
         <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Create Event</h3>
+            <span className="text-xs text-slate-400">Esc to cancel</span>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Event Title
@@ -983,85 +923,6 @@ function CreateEventModal({
               autoFocus
             />
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Day
-              </label>
-              <select
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(Number(e.target.value))}
-                onKeyPress={handleKeyPress}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
-              >
-                {days.map((d, i) => (
-                  <option key={i} value={i}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Start Hour
-              </label>
-              <select
-                value={selectedHour}
-                onChange={(e) => setSelectedHour(Number(e.target.value))}
-                onKeyPress={handleKeyPress}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
-              >
-                {TIME_SLOTS.map((h) => (
-                  <option key={h} value={h}>
-                    {formatHour(h)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Duration (hours)
-            </label>
-            <select
-              value={selectedDuration}
-              onChange={(e) => setSelectedDuration(Number(e.target.value))}
-              onKeyPress={handleKeyPress}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
-            >
-              {Array.from(
-                {
-                  length: Math.max(
-                    1,
-                    Math.floor((MAX_HOUR - selectedHour) / 0.5),
-                  ),
-                },
-                (_, i) => (i + 1) * 0.5,
-              ).map((d) => (
-                <option key={d} value={d}>
-                  {d === 0.5 ? "30 min" : `${d} hour${d > 1 ? "s" : ""}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
-            >
-              Create Event
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1070,52 +931,40 @@ function CreateEventModal({
 
 interface EditEventModalProps {
   event: CalendarEvent;
-  days: string[];
-  onSave: (event: CalendarEvent) => void;
+  onSave: (title: string) => void;
   onCancel: () => void;
 }
 
 function EditEventModal({
   event,
-  days,
   onSave,
   onCancel,
 }: EditEventModalProps) {
   const [title, setTitle] = useState(event.title);
-  const [day, setDay] = useState(event.day);
-  const [hour, setHour] = useState(event.startHour);
-  const [duration, setDuration] = useState(event.duration);
 
   const handleSave = () => {
-    onSave({
-      ...event,
-      title,
-      day,
-      startHour: hour,
-      duration,
-    });
+    onSave(title);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+      e.preventDefault();
       handleSave();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-slate-900 border border-slate-700 p-6 w-96 shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Edit Event</h3>
-          <button
-            onClick={onCancel}
-            className="p-1 hover:bg-slate-800 transition-colors"
-          >
-            <X size={20} className="text-slate-400" />
-          </button>
-        </div>
-
         <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Edit Event</h3>
+            <span className="text-xs text-slate-400">Esc to cancel</span>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Title
@@ -1128,80 +977,6 @@ function EditEventModal({
               className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               autoFocus
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Day
-              </label>
-              <select
-                value={day}
-                onChange={(e) => setDay(Number(e.target.value))}
-                onKeyPress={handleKeyPress}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
-              >
-                {days.map((d, i) => (
-                  <option key={i} value={i}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Start Hour
-              </label>
-              <select
-                value={hour}
-                onChange={(e) => setHour(Number(e.target.value))}
-                onKeyPress={handleKeyPress}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
-              >
-                {TIME_SLOTS.map((h) => (
-                  <option key={h} value={h}>
-                    {formatHour(h)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Duration (hours)
-            </label>
-            <select
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              onKeyPress={handleKeyPress}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-indigo-500"
-            >
-              {Array.from(
-                { length: Math.max(1, Math.floor((MAX_HOUR - hour) / 0.5)) },
-                (_, i) => (i + 1) * 0.5,
-              ).map((d) => (
-                <option key={d} value={d}>
-                  {d === 0.5 ? "30 min" : `${d} hour${d > 1 ? "s" : ""}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
-            >
-              Save Changes
-            </button>
           </div>
         </div>
       </div>
