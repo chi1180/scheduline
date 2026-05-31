@@ -22,6 +22,8 @@ const COLORS = {
   labelBackground: "rgb(15, 23, 42)",
   labelBackgroundFocused: "rgb(30, 41, 59)",
   labelBackgroundSelected: "rgb(49, 46, 129)",
+  hourLabelBackground: "rgb(15, 23, 42)",
+  hourLabelBackgroundAlt: "rgb(30, 41, 59)",
   labelText: "rgb(203, 213, 225)",
   labelTextFocused: "rgb(199, 210, 254)",
   labelTextSelected: "#ffffff",
@@ -94,7 +96,8 @@ export function CanvasCalendarGrid({
     const update = () => setNow(new Date());
     update();
     const nowDate = new Date();
-    const msUntilNextMinute = (60 - nowDate.getSeconds()) * 1000 - nowDate.getMilliseconds();
+    const msUntilNextMinute =
+      (60 - nowDate.getSeconds()) * 1000 - nowDate.getMilliseconds();
     const timeoutId = window.setTimeout(() => {
       update();
       nowIntervalRef.current = window.setInterval(update, 60_000);
@@ -158,20 +161,37 @@ export function CanvasCalendarGrid({
           />
 
           {/* Hour labels */}
-          {HOUR_LABELS.map((hour: number) => (
-            <Text
-              key={hour}
-              x={LABEL_WIDTH + (hour - MIN_HOUR) * slotWidth * 2}
-              y={6}
-              width={slotWidth * 2}
-              height={HEADER_HEIGHT}
-              text={`${String(hour).padStart(2, "0")}:00`}
-              fontSize={11}
-              fontStyle="600"
-              align="center"
-              fill={COLORS.labelText}
-            />
-          ))}
+          {HOUR_LABELS.map((hour: number, index: number) => {
+            const x = LABEL_WIDTH + (hour - MIN_HOUR) * slotWidth * 2;
+            const isAlt = index % 2 === 1;
+
+            return (
+              <React.Fragment key={hour}>
+                <Rect
+                  x={x}
+                  y={0}
+                  width={slotWidth * 2}
+                  height={HEADER_HEIGHT}
+                  fill={
+                    isAlt
+                      ? COLORS.hourLabelBackgroundAlt
+                      : COLORS.hourLabelBackground
+                  }
+                />
+                <Text
+                  x={x}
+                  y={6}
+                  width={slotWidth * 2}
+                  height={HEADER_HEIGHT}
+                  text={`${String(hour).padStart(2, "0")}:00`}
+                  fontSize={11}
+                  fontStyle="600"
+                  align="center"
+                  fill={COLORS.labelText}
+                />
+              </React.Fragment>
+            );
+          })}
 
           {/* Vertical grid lines */}
           {TIME_SLOTS.map((slot: number, index: number) => (
@@ -342,7 +362,8 @@ export function CanvasCalendarGrid({
             const xNow = LABEL_WIDTH + slotIndexFloat * slotWidth;
             const yNow = HEADER_HEIGHT + todayIndex * ROW_HEIGHT;
             // Keep line within the grid bounds
-            if (xNow < LABEL_WIDTH || xNow > LABEL_WIDTH + gridWidth) return null;
+            if (xNow < LABEL_WIDTH || xNow > LABEL_WIDTH + gridWidth)
+              return null;
             return (
               <Line
                 points={[xNow, yNow, xNow, yNow + ROW_HEIGHT]}
