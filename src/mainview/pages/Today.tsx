@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { indexDBAPI, type IDBConfig } from "../utils/indexDBAPI";
 import { MAX_HOUR, MIN_HOUR, SLOT_INTERVAL_HOURS } from "../components/Calendar/timeGrid";
 import type { CalendarEvent } from "./Calendar";
@@ -83,6 +83,8 @@ export default function Today() {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [now, setNow] = useState(() => new Date());
+  const timelineBodyRef = useRef<HTMLDivElement>(null);
+  const [timelineBodyHeight, setTimelineBodyHeight] = useState(0);
 
   useEffect(() => {
     const init = async () => {
@@ -267,9 +269,25 @@ export default function Today() {
       ),
     [],
   );
-  const timelineHeight = timelineSlots.length * TIMELINE_SLOT_HEIGHT;
+  const slotHeight =
+    timelineBodyHeight > 0
+      ? timelineBodyHeight / timelineSlots.length
+      : TIMELINE_SLOT_HEIGHT;
+  const timelineHeight = timelineSlots.length * slotHeight;
   const nowLineTop =
-    ((nowHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) * TIMELINE_SLOT_HEIGHT;
+    ((nowHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) * slotHeight;
+
+  useEffect(() => {
+    const measure = () => {
+      if (timelineBodyRef.current) {
+        setTimelineBodyHeight(timelineBodyRef.current.clientHeight);
+      }
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   if (isLoading) {
     return (
@@ -280,49 +298,16 @@ export default function Today() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto h-[calc(100vh-6rem)] overflow-hidden">
       <p className="text-center text-app-secondary">
         Write you mind as a <strong>note</strong>, as a <strong>keep</strong>,
         as a foot print of your <strong>efforts</strong>_
       </p>
 
-      <div className="mt-6 flex gap-4 min-h-[70vh]">
-        <section className="flex-[2] border border-slate-700 bg-slate-900 p-4">
-          <div className="mb-4 flex items-start justify-between gap-4 border-b border-slate-700 pb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-white">Note</h3>
-              <p className="text-xs text-slate-400">
-                {selectedEvent ? selectedEvent.title : "Select an event"}
-              </p>
-            </div>
-            <div className="text-right text-xs text-slate-400">
-              <div>{getLocalDateKey(now)}</div>
-              <div>{formatTime(nowHour)}</div>
-            </div>
-          </div>
-
-          <textarea
-            value={note}
-            onChange={(e) => handleNoteChange(e.target.value)}
-            disabled={!selectedEvent}
-            placeholder="Write today's note here..."
-            className="min-h-[calc(70vh-8.5rem)] w-full resize-none border border-slate-700 bg-slate-950 px-4 py-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
-          />
-
-          <div className="mt-3 text-xs text-slate-400">
-            {isLoadingNote
-              ? "Loading note..."
-              : saveState === "saving"
-                ? "Saving..."
-                : saveState === "error"
-                  ? "Save failed"
-                  : "Saved"}
-          </div>
-        </section>
-
-        <section className="flex-[1] border border-slate-700 bg-slate-900">
+      <div className="mt-6 flex h-[calc(100%-2.5rem)] gap-4 overflow-hidden">
+        <section className="flex flex-[1] min-h-0 flex-col border border-slate-700 bg-slate-900">
           <div className="border-b border-slate-700 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-semibold text-white">Timeline</h3>
                 <p className="text-xs text-slate-400">
@@ -336,23 +321,22 @@ export default function Today() {
             </div>
           </div>
 
-          <div className="max-h-[calc(70vh-4rem)] overflow-y-auto">
-            <div className="relative" style={{ height: timelineHeight }}>
+          <div ref={timelineBodyRef} className="relative flex-1 min-h-0 overflow-hidden">
+            <div className="relative h-full" style={{ height: timelineHeight }}>
               <div
                 className="absolute inset-y-0 left-0 border-r border-slate-700"
                 style={{ width: TIMELINE_LABEL_WIDTH }}
               >
                 {timelineSlots.map((slot) => {
                   const slotOffset =
-                    ((slot - MIN_HOUR) / SLOT_INTERVAL_HOURS) *
-                    TIMELINE_SLOT_HEIGHT;
+                    ((slot - MIN_HOUR) / SLOT_INTERVAL_HOURS) * slotHeight;
                   const minute = Math.round((slot - Math.floor(slot)) * 60);
 
                   return minute === 0 ? (
                     <div
                       key={slot}
                       className="absolute left-0 flex items-center pr-2 text-[10px] text-slate-400"
-                      style={{ top: slotOffset - 6, height: TIMELINE_SLOT_HEIGHT }}
+                      style={{ top: slotOffset - 6, height: slotHeight }}
                     >
                       <span className="w-full text-right">
                         {String(Math.floor(slot)).padStart(2, "0")}:00
@@ -373,8 +357,8 @@ export default function Today() {
                       index % 2 === 0 ? "border-slate-800" : "border-slate-800/60"
                     }`}
                     style={{
-                      top: index * TIMELINE_SLOT_HEIGHT,
-                      height: TIMELINE_SLOT_HEIGHT,
+                      top: index * slotHeight,
+                      height: slotHeight,
                     }}
                   />
                 ))}
@@ -398,10 +382,9 @@ export default function Today() {
                     style={{
                       top:
                         ((event.startHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) *
-                        TIMELINE_SLOT_HEIGHT,
+                        slotHeight,
                       height:
-                        (event.duration / SLOT_INTERVAL_HOURS) *
-                        TIMELINE_SLOT_HEIGHT,
+                        (event.duration / SLOT_INTERVAL_HOURS) * slotHeight,
                     }}
                   >
                     <div className="text-xs font-medium text-white">
@@ -422,6 +405,39 @@ export default function Today() {
                 )}
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="flex flex-[2] min-h-0 flex-col border border-slate-700 bg-slate-900 p-4">
+          <div className="mb-4 flex items-start justify-between gap-4 border-b border-slate-700 pb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Note</h3>
+              <p className="text-xs text-slate-400">
+                {selectedEvent ? selectedEvent.title : "Select an event"}
+              </p>
+            </div>
+            <div className="text-right text-xs text-slate-400">
+              <div>{getLocalDateKey(now)}</div>
+              <div>{formatTime(nowHour)}</div>
+            </div>
+          </div>
+
+          <textarea
+            value={note}
+            onChange={(e) => handleNoteChange(e.target.value)}
+            disabled={!selectedEvent}
+            placeholder="Write today's note here..."
+            className="flex-1 min-h-0 w-full resize-none border border-slate-700 bg-slate-950 px-4 py-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+
+          <div className="mt-3 text-xs text-slate-400">
+            {isLoadingNote
+              ? "Loading note..."
+              : saveState === "saving"
+                ? "Saving..."
+                : saveState === "error"
+                  ? "Save failed"
+                  : "Saved"}
           </div>
         </section>
       </div>
