@@ -43,9 +43,12 @@ class IndexDBAPI {
    * @param config データベース設定
    */
   async init(config: IDBConfig): Promise<IDBDatabase> {
-    const openDatabase = (version: number) =>
+    const openDatabase = (version?: number) =>
       new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(config.dbName, version);
+        const request =
+          version === undefined
+            ? indexedDB.open(config.dbName)
+            : indexedDB.open(config.dbName, version);
 
         request.onerror = () => {
           reject(new Error(`IndexDB初期化エラー: ${request.error}`));
@@ -76,22 +79,29 @@ class IndexDBAPI {
         };
       });
 
-    const db = await openDatabase(config.version);
-    const missingStores = config.stores.filter(
+    let db: IDBDatabase;
+
+    try {
+      db = await openDatabase(config.version);
+    } catch (error) {
+      // If an existing database is newer than the requested version, fall back
+      // to opening the current database instead of failing initialization.
+      db = await openDatabase();
+    }
+
+    let missingStores = config.stores.filter(
       (store) => !db.objectStoreNames.contains(store.name),
     );
 
-    if (missingStores.length === 0) {
-      this.db = db;
-      this.config = config;
-      return db;
+    if (missingStores.length > 0) {
+      const upgradeVersion = db.version + 1;
+      db.close();
+      db = await openDatabase(upgradeVersion);
     }
 
-    db.close();
-    const upgradedDb = await openDatabase(db.version + 1);
-    this.db = upgradedDb;
+    this.db = db;
     this.config = config;
-    return upgradedDb;
+    return db;
   }
 
   /**

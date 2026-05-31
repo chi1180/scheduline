@@ -193,7 +193,15 @@ export default function Today() {
         content,
         updatedAt: new Date().toISOString(),
       };
-      await indexDBAPI.update("today-notes", record);
+      const existing = await indexDBAPI.read<TodayNoteRecord>(
+        "today-notes",
+        record.id,
+      );
+      if (existing) {
+        await indexDBAPI.update("today-notes", record);
+      } else {
+        await indexDBAPI.create("today-notes", record);
+      }
       setSaveState("saved");
     } catch (error) {
       console.error("Failed to save note:", error);
