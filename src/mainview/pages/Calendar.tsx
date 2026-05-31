@@ -334,7 +334,6 @@ export default function Calendar() {
           // enter time-adjust mode: next h/l will extend earlier/later by 30 minutes
           e.preventDefault();
           setTimeAdjustMode(true);
-          toast('Time adjust: press H to extend earlier, L to extend later');
         } else if (e.key === "Escape") {
           e.preventDefault();
           setSelectedEventId(undefined);
@@ -427,13 +426,13 @@ export default function Calendar() {
       setEvents([...events, newEvent]);
       setEventTitle("");
       setSelectedSlot(null);
-      toast.success("Event created successfully");
+
     } catch (error) {
       console.error("Failed to create event:", error);
       setEvents([...events, newEvent]);
       setEventTitle("");
       setSelectedSlot(null);
-      toast.success("Event created successfully");
+
     }
   };
 
@@ -459,13 +458,13 @@ export default function Calendar() {
       setEvents([...events, newEvent]);
       setLastCreatedEventId(newEvent.id);
       setCreatingEvent(null);
-      toast.success("Event created successfully");
+
     } catch (error) {
       console.error("Failed to create event:", error);
       setEvents([...events, newEvent]);
       setLastCreatedEventId(newEvent.id);
       setCreatingEvent(null);
-      toast.success("Event created successfully");
+
     }
   };
 
@@ -486,13 +485,13 @@ export default function Calendar() {
       setEvents(events.filter((e) => e.id !== id));
       setSelectedEventId(nextId);
       setDaySelected(true);
-      toast.success("Event deleted successfully");
+
     } catch (error) {
       console.error("Failed to delete event:", error);
       setEvents(events.filter((e) => e.id !== id));
       setSelectedEventId(nextId);
       setDaySelected(true);
-      toast.success("Event deleted successfully");
+
     }
   };
 
@@ -552,9 +551,7 @@ export default function Calendar() {
       setEvents((prev) => [...prev, ...valid]);
 
       const skipped = invalid.length > 0 ? ` (${invalid.length} skipped)` : "";
-      toast.success(
-        `Imported ${valid.length} event${valid.length !== 1 ? "s" : ""}${skipped}`,
-      );
+
     } catch {
       toast.error("Failed to parse JSON file");
     }
@@ -567,14 +564,14 @@ export default function Calendar() {
         events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)),
       );
       setEditingDayIndex(null);
-      toast.success("Event updated successfully");
+
     } catch (error) {
       console.error("Failed to update event:", error);
       setEvents(
         events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)),
       );
       setEditingDayIndex(null);
-      toast.success("Event updated successfully");
+
     }
   };
 
@@ -1187,5 +1184,4 @@ const exportEvents = (eventsList: CalendarEvent[]) => {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  toast.success("Events exported successfully");
 };
