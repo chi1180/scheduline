@@ -183,39 +183,100 @@ export default function Calendar() {
 
         const key = e.key.toLowerCase();
 
-        // Modifier behaviors: if holding 't' or 's' while pressing h/l
+        // Modifier behaviors: handle combinations when holding 't' or 's' + h/l
         if ((key === "h" || key === "l") && pressedKeysRef.current.has("t")) {
           e.preventDefault();
-          // Move event start later by 30 minutes
           const ev = currentEvent;
-          const delta = 0.5;
-          let newStart = ev.startHour + delta;
-          const maxStart = MAX_HOUR - ev.duration;
-          if (newStart > maxStart) newStart = maxStart;
-          // ensure not overlapping next event
-          const next = dayEvents.find((o) => o.startHour > ev.startHour);
-          if (next && newStart + ev.duration > next.startHour) {
-            newStart = next.startHour - ev.duration;
+          const prevEnd = (() => {
+            let pEnd = MIN_HOUR;
+            for (const o of dayEvents) {
+              if (o.id === ev.id) break;
+              pEnd = Math.max(pEnd, o.startHour + o.duration);
+            }
+            return pEnd;
+          })();
+
+          // t + h : move start earlier by 30min (expand to earlier), keep end fixed
+          if (key === "h") {
+            const desiredStart = Math.round((ev.startHour - 0.5) * 100) / 100;
+            const newStart = Math.max(prevEnd, Math.max(MIN_HOUR, desiredStart));
+            const newDuration = Math.round(((ev.startHour + ev.duration) - newStart) * 100) / 100;
+            if (newDuration >= 0.5) {
+              updateEvent({ ...ev, startHour: newStart, duration: newDuration });
+            }
+            return;
           }
-          if (newStart === ev.startHour) {
-            toast.error("Cannot move start later (boundary or conflict)");
-          } else {
-            updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
+
+          // t + l : move end later by 30min (expand to later), keep start fixed
+          if (key === "l") {
+            const nextStart = (() => {
+              let nStart = MAX_HOUR;
+              for (const o of dayEvents) {
+                if (o.startHour > ev.startHour) {
+                  nStart = Math.min(nStart, o.startHour);
+                }
+              }
+              return nStart;
+            })();
+            const desiredEnd = Math.round((ev.startHour + ev.duration + 0.5) * 100) / 100;
+            const newEnd = Math.min(nextStart, Math.min(MAX_HOUR, desiredEnd));
+            const newDuration = Math.round((newEnd - ev.startHour) * 100) / 100;
+            if (newDuration >= 0.5) {
+              updateEvent({ ...ev, duration: newDuration });
+            }
+            return;
           }
-          return;
         }
 
         if ((key === "h" || key === "l") && pressedKeysRef.current.has("s")) {
           e.preventDefault();
-          // Shrink event end by 30 minutes (reduce duration)
           const ev = currentEvent;
-          const newDuration = Math.round((ev.duration - 0.5) * 100) / 100;
-          if (newDuration < 0.5) {
-            toast.error("Cannot shorten event below 30 minutes");
-          } else {
-            updateEvent({ ...ev, duration: newDuration });
+          // compute next event start and prev end
+          const prevEnd = (() => {
+            let pEnd = MIN_HOUR;
+            for (const o of dayEvents) {
+              if (o.id === ev.id) break;
+              pEnd = Math.max(pEnd, o.startHour + o.duration);
+            }
+            return pEnd;
+          })();
+          const nextStart = (() => {
+            let nStart = MAX_HOUR;
+            for (const o of dayEvents) {
+              if (o.startHour > ev.startHour) {
+                nStart = Math.min(nStart, o.startHour);
+              }
+            }
+            return nStart;
+          })();
+
+          // s + h : move start later by 30min (shrink from start), keep end fixed
+          if (key === "h") {
+            const desiredStart = Math.round((ev.startHour + 0.5) * 100) / 100;
+            // cannot overlap previous events
+            let newStart = Math.max(desiredStart, prevEnd);
+            // ensure not past end - 0.5
+            const endTime = ev.startHour + ev.duration;
+            if (newStart > endTime - 0.5) newStart = Math.max(prevEnd, Math.round((endTime - 0.5) * 100) / 100);
+            const newDuration = Math.round((endTime - newStart) * 100) / 100;
+            if (newDuration >= 0.5) {
+              updateEvent({ ...ev, startHour: newStart, duration: newDuration });
+            }
+            return;
           }
-          return;
+
+          // s + l : move end earlier by 30min (shrink from end), keep start fixed
+          if (key === "l") {
+            const desiredEnd = Math.round((ev.startHour + ev.duration - 0.5) * 100) / 100;
+            let newEnd = Math.min(desiredEnd, nextStart);
+            // ensure not before start + 0.5
+            if (newEnd < ev.startHour + 0.5) newEnd = ev.startHour + 0.5;
+            const newDuration = Math.round((newEnd - ev.startHour) * 100) / 100;
+            if (newDuration >= 0.5) {
+              updateEvent({ ...ev, duration: newDuration });
+            }
+            return;
+          }
         }
 
         // If time-adjust mode is active, handle extending earlier/later
