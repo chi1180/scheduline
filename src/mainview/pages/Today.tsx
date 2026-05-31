@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { indexDBAPI, type IDBConfig } from "../utils/indexDBAPI";
+import { MAX_HOUR, MIN_HOUR, SLOT_INTERVAL_HOURS } from "../components/Calendar/timeGrid";
 import type { CalendarEvent } from "./Calendar";
 
 interface TodayNoteRecord {
@@ -57,7 +58,8 @@ const getInitialEvent = (events: CalendarEvent[], nowHour: number) => {
   if (events.length === 0) return undefined;
 
   const current = events.find(
-    (event) => event.startHour <= nowHour && nowHour < event.startHour + event.duration,
+    (event) =>
+      event.startHour <= nowHour && nowHour < event.startHour + event.duration,
   );
   if (current) return current;
 
@@ -65,7 +67,11 @@ const getInitialEvent = (events: CalendarEvent[], nowHour: number) => {
   return upcoming ?? events[events.length - 1];
 };
 
-const buildNoteId = (dateKey: string, eventId: string) => `${dateKey}:${eventId}`;
+const buildNoteId = (dateKey: string, eventId: string) =>
+  `${dateKey}:${eventId}`;
+
+const TIMELINE_SLOT_HEIGHT = 28;
+const TIMELINE_LABEL_WIDTH = 72;
 
 export default function Today() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -73,9 +79,9 @@ export default function Today() {
   const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -107,10 +113,13 @@ export default function Today() {
     update();
 
     let intervalId: number | undefined;
-    const timeoutId = window.setTimeout(() => {
-      update();
-      intervalId = window.setInterval(update, 60_000);
-    }, 60_000 - new Date().getSeconds() * 1000 - new Date().getMilliseconds());
+    const timeoutId = window.setTimeout(
+      () => {
+        update();
+        intervalId = window.setInterval(update, 60_000);
+      },
+      60_000 - new Date().getSeconds() * 1000 - new Date().getMilliseconds(),
+    );
 
     return () => {
       clearTimeout(timeoutId);
@@ -178,7 +187,10 @@ export default function Today() {
           eventId: selectedEvent.id,
           date: todayKey,
         });
-        const record = await indexDBAPI.read<TodayNoteRecord>("today-notes", noteId);
+        const record = await indexDBAPI.read<TodayNoteRecord>(
+          "today-notes",
+          noteId,
+        );
         console.log("[Today] note loaded", {
           noteId,
           found: !!record,
@@ -247,17 +259,17 @@ export default function Today() {
   };
 
   const nowHour = getNowHour(now);
-  const activeEvent = todayEvents.find(
-    (event) => event.startHour <= nowHour && nowHour < event.startHour + event.duration,
+  const timelineSlots = useMemo(
+    () =>
+      Array.from(
+        { length: (MAX_HOUR - MIN_HOUR) / SLOT_INTERVAL_HOURS },
+        (_, index) => MIN_HOUR + index * SLOT_INTERVAL_HOURS,
+      ),
+    [],
   );
-  const nextEventIndex =
-    activeEvent ? -1 : todayEvents.findIndex((event) => event.startHour > nowHour);
-  const nowInsertIndex =
-    activeEvent || todayEvents.length === 0
-      ? -1
-      : nextEventIndex === -1
-        ? todayEvents.length
-        : nextEventIndex;
+  const timelineHeight = timelineSlots.length * TIMELINE_SLOT_HEIGHT;
+  const nowLineTop =
+    ((nowHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) * TIMELINE_SLOT_HEIGHT;
 
   if (isLoading) {
     return (
@@ -275,12 +287,12 @@ export default function Today() {
       </p>
 
       <div className="mt-6 flex gap-4 min-h-[70vh]">
-        <section className="flex-1 border border-slate-700 bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+        <section className="flex-[2] border border-slate-700 bg-slate-900 p-4">
+          <div className="mb-4 flex items-start justify-between gap-4 border-b border-slate-700 pb-4">
             <div>
-              <h3 className="text-lg font-semibold text-white">Today</h3>
+              <h3 className="text-lg font-semibold text-white">Note</h3>
               <p className="text-xs text-slate-400">
-                {todayEvents.length} event{todayEvents.length !== 1 ? "s" : ""} scheduled
+                {selectedEvent ? selectedEvent.title : "Select an event"}
               </p>
             </div>
             <div className="text-right text-xs text-slate-400">
@@ -289,85 +301,12 @@ export default function Today() {
             </div>
           </div>
 
-          <div className="divide-y divide-slate-800">
-            {todayEvents.length === 0 ? (
-              <div className="p-6 text-sm text-slate-400">No events scheduled for today.</div>
-            ) : (
-              todayEvents.map((event, index) => (
-                <div key={event.id}>
-                  {nowInsertIndex === index && (
-                    <div className="flex items-center gap-3 border-b border-dashed border-red-700 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-                      <span className="rounded border border-red-700 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
-                        Now
-                      </span>
-                      <span>{formatTime(nowHour)}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEventId(event.id)}
-                    className={`w-full px-4 py-4 text-left transition-colors ${
-                      selectedEventId === event.id
-                        ? "bg-indigo-950/60"
-                        : "hover:bg-slate-800/70"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-semibold text-white">
-                          {event.title}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-400">
-                          {formatTime(event.startHour)} -{" "}
-                          {formatTime(event.startHour + event.duration)}
-                        </div>
-                      </div>
-                      {selectedEventId === event.id && (
-                        <span className="rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                          Selected
-                        </span>
-                      )}
-                    </div>
-                  </button>
-
-                  {activeEvent?.id === event.id && (
-                    <div className="border-t border-dashed border-red-700 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-                      <span className="mr-2 rounded border border-red-700 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
-                        Now
-                      </span>
-                      <span>{formatTime(nowHour)}</span>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-
-            {nowInsertIndex === todayEvents.length && todayEvents.length > 0 && (
-              <div className="flex items-center gap-3 border-t border-dashed border-red-700 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-                <span className="rounded border border-red-700 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
-                  Now
-                </span>
-                <span>{formatTime(nowHour)}</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="w-[360px] shrink-0 border border-slate-700 bg-slate-900 p-4">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-white">Note</h3>
-            <p className="text-xs text-slate-400">
-              {selectedEvent ? selectedEvent.title : "Select an event"}
-            </p>
-          </div>
-
           <textarea
             value={note}
             onChange={(e) => handleNoteChange(e.target.value)}
             disabled={!selectedEvent}
             placeholder="Write today's note here..."
-            className="min-h-[420px] w-full resize-none border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-[calc(70vh-8.5rem)] w-full resize-none border border-slate-700 bg-slate-950 px-4 py-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <div className="mt-3 text-xs text-slate-400">
@@ -379,7 +318,112 @@ export default function Today() {
                   ? "Save failed"
                   : "Saved"}
           </div>
-        </aside>
+        </section>
+
+        <section className="flex-[1] border border-slate-700 bg-slate-900">
+          <div className="border-b border-slate-700 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Timeline</h3>
+                <p className="text-xs text-slate-400">
+                  30 minute increments
+                </p>
+              </div>
+              <div className="text-right text-xs text-slate-400">
+                <div>{todayEvents.length} event{todayEvents.length !== 1 ? "s" : ""}</div>
+                <div>{formatTime(nowHour)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(70vh-4rem)] overflow-y-auto">
+            <div className="relative" style={{ height: timelineHeight }}>
+              <div
+                className="absolute inset-y-0 left-0 border-r border-slate-700"
+                style={{ width: TIMELINE_LABEL_WIDTH }}
+              >
+                {timelineSlots.map((slot) => {
+                  const slotOffset =
+                    ((slot - MIN_HOUR) / SLOT_INTERVAL_HOURS) *
+                    TIMELINE_SLOT_HEIGHT;
+                  const minute = Math.round((slot - Math.floor(slot)) * 60);
+
+                  return minute === 0 ? (
+                    <div
+                      key={slot}
+                      className="absolute left-0 flex items-center pr-2 text-[10px] text-slate-400"
+                      style={{ top: slotOffset - 6, height: TIMELINE_SLOT_HEIGHT }}
+                    >
+                      <span className="w-full text-right">
+                        {String(Math.floor(slot)).padStart(2, "0")}:00
+                      </span>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+
+              <div
+                className="absolute inset-y-0"
+                style={{ left: TIMELINE_LABEL_WIDTH, right: 0 }}
+              >
+                {timelineSlots.map((slot, index) => (
+                  <div
+                    key={slot}
+                    className={`absolute left-0 right-0 border-t ${
+                      index % 2 === 0 ? "border-slate-800" : "border-slate-800/60"
+                    }`}
+                    style={{
+                      top: index * TIMELINE_SLOT_HEIGHT,
+                      height: TIMELINE_SLOT_HEIGHT,
+                    }}
+                  />
+                ))}
+
+                {!todayEvents.length && (
+                  <div className="absolute left-0 top-4 px-4 text-sm text-slate-400">
+                    No events scheduled for today.
+                  </div>
+                )}
+
+                {todayEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => setSelectedEventId(event.id)}
+                    className={`absolute left-2 right-2 rounded px-3 py-2 text-left ${
+                      selectedEventId === event.id
+                        ? "border border-indigo-500 bg-indigo-950/60 shadow-lg shadow-indigo-950/30"
+                        : "border border-slate-700 bg-slate-800/80 hover:border-indigo-500 hover:bg-slate-800"
+                    }`}
+                    style={{
+                      top:
+                        ((event.startHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) *
+                        TIMELINE_SLOT_HEIGHT,
+                      height:
+                        (event.duration / SLOT_INTERVAL_HOURS) *
+                        TIMELINE_SLOT_HEIGHT,
+                    }}
+                  >
+                    <div className="text-xs font-medium text-white">
+                      {event.title}
+                    </div>
+                    <div className="mt-1 text-[10px] text-slate-400">
+                      {formatTime(event.startHour)} -{" "}
+                      {formatTime(event.startHour + event.duration)}
+                    </div>
+                  </button>
+                ))}
+
+                {nowHour >= MIN_HOUR && nowHour <= MAX_HOUR && (
+                  <div
+                    className="absolute left-0 right-0 h-px bg-red-500"
+                    style={{ top: nowLineTop }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );
