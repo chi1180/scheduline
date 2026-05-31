@@ -56,6 +56,8 @@ export default function Calendar() {
 
   // Temporary mode for time adjustment: after pressing 't', next 'h' or 'l' will extend event earlier/later
   const [timeAdjustMode, setTimeAdjustMode] = useState(false);
+  // Track pressed keys (for combinations like holding 't' or 's' while pressing h/l)
+  const pressedKeysRef = useRef<Set<string>>(new Set());
 
   // Delete confirmation dialog
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | undefined>();
@@ -136,6 +138,8 @@ export default function Calendar() {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // track pressed key
+      pressedKeysRef.current.add(e.key.toLowerCase());
       if (selectedSlot) {
         // Add Event Modal is open - only handle Escape, Enter
         if (e.key === "Escape") {
@@ -176,6 +180,43 @@ export default function Calendar() {
         );
         const currentEvent = dayEvents[currentIndex];
         if (!currentEvent) return;
+
+        const key = e.key.toLowerCase();
+
+        // Modifier behaviors: if holding 't' or 's' while pressing h/l
+        if ((key === "h" || key === "l") && pressedKeysRef.current.has("t")) {
+          e.preventDefault();
+          // Move event start later by 30 minutes
+          const ev = currentEvent;
+          const delta = 0.5;
+          let newStart = ev.startHour + delta;
+          const maxStart = MAX_HOUR - ev.duration;
+          if (newStart > maxStart) newStart = maxStart;
+          // ensure not overlapping next event
+          const next = dayEvents.find((o) => o.startHour > ev.startHour);
+          if (next && newStart + ev.duration > next.startHour) {
+            newStart = next.startHour - ev.duration;
+          }
+          if (newStart === ev.startHour) {
+            toast.error("Cannot move start later (boundary or conflict)");
+          } else {
+            updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
+          }
+          return;
+        }
+
+        if ((key === "h" || key === "l") && pressedKeysRef.current.has("s")) {
+          e.preventDefault();
+          // Shrink event end by 30 minutes (reduce duration)
+          const ev = currentEvent;
+          const newDuration = Math.round((ev.duration - 0.5) * 100) / 100;
+          if (newDuration < 0.5) {
+            toast.error("Cannot shorten event below 30 minutes");
+          } else {
+            updateEvent({ ...ev, duration: newDuration });
+          }
+          return;
+        }
 
         // If time-adjust mode is active, handle extending earlier/later
         if (timeAdjustMode) {
@@ -377,8 +418,16 @@ export default function Calendar() {
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      pressedKeysRef.current.delete(e.key.toLowerCase());
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
   }, [
     focusedDay,
     selectedEventId,
