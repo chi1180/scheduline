@@ -1,4 +1,4 @@
-export const MIN_HOUR = 4;
+export const MIN_HOUR = 6;
 export const MAX_HOUR = 23;
 export const SLOT_INTERVAL_HOURS = 0.5;
 export const SLOT_WIDTH = 40; // px per 30-min slot

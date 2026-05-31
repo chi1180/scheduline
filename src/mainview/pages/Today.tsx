@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { indexDBAPI, type IDBConfig } from "../utils/indexDBAPI";
-import { MAX_HOUR, MIN_HOUR, SLOT_INTERVAL_HOURS } from "../components/Calendar/timeGrid";
+import {
+  MAX_HOUR,
+  MIN_HOUR,
+  SLOT_INTERVAL_HOURS,
+} from "../components/Calendar/timeGrid";
+import { TagFilterBar } from "../components/TagFilterBar";
 import type { CalendarEvent } from "./Calendar";
+import {
+  collectTags,
+  eventMatchesTagFilters,
+  normalizeTags,
+} from "../utils/eventTags";
 
 interface TodayNoteRecord {
   id: string;
@@ -83,6 +93,7 @@ export default function Today() {
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
+  const [tagFilters, setTagFilters] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(() => new Date());
   const timelineBodyRef = useRef<HTMLDivElement>(null);
   const [timelineBodyHeight, setTimelineBodyHeight] = useState(0);
@@ -101,7 +112,12 @@ export default function Today() {
           count: savedEvents.length,
           ids: savedEvents.map((event) => event.id),
         });
-        setEvents(savedEvents);
+        setEvents(
+          savedEvents.map((event) => ({
+            ...event,
+            tags: normalizeTags(event.tags),
+          })),
+        );
       } catch (error) {
         console.error("[Today] failed to initialize or load events:", error);
       } finally {
@@ -136,18 +152,38 @@ export default function Today() {
 
   const todayIndex = now.getDay();
   const todayKey = useMemo(() => getLocalDateKey(now), [now]);
+  const allTags = useMemo(() => collectTags(events), [events]);
+
+  useEffect(() => {
+    setTagFilters((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const tag of allTags) {
+        next[tag] = prev[tag] ?? true;
+      }
+      return next;
+    });
+  }, [allTags]);
+
+  const visibleEvents = useMemo(
+    () => events.filter((event) => eventMatchesTagFilters(event, tagFilters)),
+    [events, tagFilters],
+  );
 
   const todayEvents = useMemo(
     () =>
-      events
+      visibleEvents
         .filter((event) => event.day === todayIndex)
         .sort((a, b) => a.startHour - b.startHour),
-    [events, todayIndex],
+    [visibleEvents, todayIndex],
   );
 
   const selectedEvent = useMemo(
     () => todayEvents.find((event) => event.id === selectedEventId),
     [todayEvents, selectedEventId],
+  );
+  const selectedEventTags = useMemo(
+    () => normalizeTags(selectedEvent?.tags),
+    [selectedEvent?.tags],
   );
 
   const focusTimeline = () => {
@@ -350,8 +386,7 @@ export default function Today() {
       ? timelineBodyHeight / timelineSlots.length
       : TIMELINE_SLOT_HEIGHT;
   const timelineHeight = timelineSlots.length * slotHeight;
-  const nowLineTop =
-    ((nowHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) * slotHeight;
+  const nowLineTop = ((nowHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) * slotHeight;
 
   useEffect(() => {
     const measure = () => {
@@ -374,30 +409,42 @@ export default function Today() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto h-[calc(100vh-6rem)] flex flex-col overflow-hidden">
-      <p className="text-center text-app-secondary">
+    <div className="w-[calc(100vw-6rem)] mx-auto h-[calc(100vh-6rem)] flex flex-col overflow-hidden">
+      <p className="text-center text-app-secondary mb-2">
         Write you mind as a <strong>note</strong>, as a <strong>keep</strong>,
         as a foot print of your <strong>efforts</strong>_
       </p>
 
-      <div className="mt-6 flex flex-1 min-h-0 gap-4 overflow-hidden">
+      <TagFilterBar
+        tags={allTags}
+        tagFilters={tagFilters}
+        onToggle={(tag, checked) =>
+          setTagFilters((prev) => ({ ...prev, [tag]: checked }))
+        }
+      />
+
+      <div className="mt-2 flex flex-1 min-h-0 gap-4 overflow-hidden">
         <section className="flex flex-[1] min-h-0 flex-col border border-slate-700 bg-slate-900">
           <div className="border-b border-slate-700 px-4 py-3">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-semibold text-white">Timeline</h3>
-                <p className="text-xs text-slate-400">
-                  30 minute increments
-                </p>
+                <p className="text-xs text-slate-400">30 minute increments</p>
               </div>
               <div className="text-right text-xs text-slate-400">
-                <div>{todayEvents.length} event{todayEvents.length !== 1 ? "s" : ""}</div>
+                <div>
+                  {todayEvents.length} event
+                  {todayEvents.length !== 1 ? "s" : ""}
+                </div>
                 <div>{formatTime(nowHour)}</div>
               </div>
             </div>
           </div>
 
-          <div ref={timelineBodyRef} className="relative flex-1 min-h-0 overflow-hidden">
+          <div
+            ref={timelineBodyRef}
+            className="relative flex-1 min-h-0 overflow-hidden"
+          >
             <div className="relative h-full" style={{ height: timelineHeight }}>
               <div
                 className="absolute inset-y-0 left-0 border-r border-slate-700"
@@ -430,7 +477,9 @@ export default function Today() {
                   <div
                     key={slot}
                     className={`absolute left-0 right-0 border-t ${
-                      index % 2 === 0 ? "border-slate-800" : "border-slate-800/60"
+                      index % 2 === 0
+                        ? "border-slate-800"
+                        : "border-slate-800/60"
                     }`}
                     style={{
                       top: index * slotHeight,
@@ -445,40 +494,42 @@ export default function Today() {
                   </div>
                 )}
 
-                {todayEvents.map((event) => (
-                  <button
-                    key={event.id}
-                    type="button"
-                    ref={(el) => {
-                      eventRefs.current[event.id] = el;
-                    }}
-                    onClick={() => {
-                      setSelectedEventId(event.id);
-                      setFocusMode("timeline");
-                    }}
-                    onFocus={() => setFocusMode("timeline")}
-                    className={`absolute left-2 right-2 px-3 py-2 text-left ${
-                      selectedEventId === event.id
-                        ? "border border-indigo-500 bg-indigo-950/60 shadow-lg shadow-indigo-950/30"
-                        : "border border-slate-700 bg-slate-800/80 hover:border-indigo-500 hover:bg-slate-800"
-                    }`}
-                    style={{
-                      top:
-                        ((event.startHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) *
-                        slotHeight,
-                      height:
-                        (event.duration / SLOT_INTERVAL_HOURS) * slotHeight,
-                    }}
-                  >
+                {todayEvents.map((event) => {
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      ref={(el) => {
+                        eventRefs.current[event.id] = el;
+                      }}
+                      onClick={() => {
+                        setSelectedEventId(event.id);
+                        setFocusMode("timeline");
+                      }}
+                      onFocus={() => setFocusMode("timeline")}
+                      className={`absolute left-2 right-2 px-3 py-2 text-left ${
+                        selectedEventId === event.id
+                          ? "border border-indigo-500 bg-indigo-950/60 shadow-lg shadow-indigo-950/30"
+                          : "border border-slate-700 bg-slate-800/80 hover:border-indigo-500 hover:bg-slate-800"
+                      }`}
+                      style={{
+                        top:
+                          ((event.startHour - MIN_HOUR) / SLOT_INTERVAL_HOURS) *
+                          slotHeight,
+                        height:
+                          (event.duration / SLOT_INTERVAL_HOURS) * slotHeight,
+                      }}
+                    >
                     <div className="text-xs font-medium text-white">
                       {event.title}
                     </div>
                     <div className="mt-1 text-[10px] text-slate-400">
                       {formatTime(event.startHour)} -{" "}
                       {formatTime(event.startHour + event.duration)}
-                    </div>
-                  </button>
-                ))}
+                      </div>
+                    </button>
+                  );
+                })}
 
                 {nowHour >= MIN_HOUR && nowHour <= MAX_HOUR && (
                   <div
@@ -498,6 +549,13 @@ export default function Today() {
               <p className="text-xs text-slate-400">
                 {selectedEvent ? selectedEvent.title : "Select an event"}
               </p>
+              {selectedEventTags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-300">
+                  {selectedEventTags.map((tag) => (
+                    <span key={tag}>{`#${tag}`}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="text-right text-xs text-slate-400">
               <div>{getLocalDateKey(now)}</div>
@@ -533,8 +591,8 @@ export default function Today() {
       </div>
 
       <div className="mt-4 shrink-0 border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-        <strong>Keyboard:</strong> enter focus note, j/k move timeline event,
-        n focus note, esc return to timeline
+        <strong>Keyboard:</strong> enter focus note, j/k move timeline event, n
+        focus note, esc return to timeline
       </div>
     </div>
   );

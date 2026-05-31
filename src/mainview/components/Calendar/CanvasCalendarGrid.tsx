@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Layer, Line, Rect, Stage, Text } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { CalendarEvent } from "../../pages/Calendar";
+import { formatTags } from "../../utils/eventTags";
 import {
   HOUR_LABELS,
   MIN_HOUR,
@@ -290,6 +291,7 @@ export function CanvasCalendarGrid({
         {/* Events layer */}
         <Layer>
           {events.map((event) => {
+            const tagText = formatTags(event.tags);
             const slotIndex = Math.round(
               (event.startHour - MIN_HOUR) / SLOT_INTERVAL_HOURS,
             );
@@ -336,7 +338,7 @@ export function CanvasCalendarGrid({
                   y={y}
                   width={Math.max(0, width - 16)}
                   height={EVENT_HEIGHT}
-                  text={event.title}
+                  text={tagText ? `${event.title}` : event.title}
                   fontSize={12}
                   fill={COLORS.eventText}
                   verticalAlign="middle"

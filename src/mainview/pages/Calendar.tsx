@@ -1,8 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import { CanvasCalendarGrid } from "../components/Calendar/CanvasCalendarGrid";
+import { TagFilterBar } from "../components/TagFilterBar";
 import { MIN_HOUR, MAX_HOUR } from "../components/Calendar/timeGrid";
 import { indexDBAPI } from "../utils/indexDBAPI";
+import {
+  collectTags,
+  eventMatchesTagFilters,
+  parseTagInput,
+  normalizeTags,
+} from "../utils/eventTags";
 
 const DAYS_OF_WEEK = [
   "Sunday",
@@ -21,6 +28,7 @@ export interface CalendarEvent {
   duration: number;
   title: string;
   color: string;
+  tags?: string[];
 }
 
 export default function Calendar() {
@@ -36,6 +44,7 @@ export default function Calendar() {
     hour: number;
   } | null>(null);
   const [eventTitle, setEventTitle] = useState("");
+  const [tagFilters, setTagFilters] = useState<Record<string, boolean>>({});
 
   // Edit mode for selected day
   const [editingDayIndex, setEditingDayIndex] = useState<number | null>(null);
@@ -83,7 +92,12 @@ export default function Calendar() {
 
         // Load events from IndexDB
         const savedEvents = await indexDBAPI.readAll<CalendarEvent>("events");
-        setEvents(savedEvents);
+        setEvents(
+          savedEvents.map((event) => ({
+            ...event,
+            tags: normalizeTags(event.tags),
+          })),
+        );
         setIsInitialized(true);
       } catch (error) {
         console.error("Failed to initialize IndexDB:", error);
@@ -96,6 +110,7 @@ export default function Calendar() {
             duration: 2,
             title: "Team Meeting",
             color: "bg-indigo-500",
+            tags: [],
           },
           {
             id: "2",
@@ -104,6 +119,7 @@ export default function Calendar() {
             duration: 1,
             title: "Lunch",
             color: "bg-indigo-500",
+            tags: [],
           },
         ];
         setEvents(defaultEvents);
@@ -113,6 +129,42 @@ export default function Calendar() {
 
     initializeDB();
   }, []);
+
+  const allTags = useMemo(() => collectTags(events), [events]);
+
+  useEffect(() => {
+    setTagFilters((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const tag of allTags) {
+        next[tag] = prev[tag] ?? true;
+      }
+      return next;
+    });
+  }, [allTags]);
+
+  const visibleEvents = useMemo(
+    () => events.filter((event) => eventMatchesTagFilters(event, tagFilters)),
+    [events, tagFilters],
+  );
+
+  useEffect(() => {
+    if (!daySelected) {
+      return;
+    }
+
+    const dayEvents = visibleEvents
+      .filter((event) => event.day === focusedDay)
+      .sort((a, b) => a.startHour - b.startHour);
+
+    if (dayEvents.length === 0) {
+      setSelectedEventId(undefined);
+      return;
+    }
+
+    if (!selectedEventId || !dayEvents.some((event) => event.id === selectedEventId)) {
+      setSelectedEventId(dayEvents[0].id);
+    }
+  }, [daySelected, focusedDay, selectedEventId, visibleEvents]);
 
   // Focus on last created event when modal is closed
   useEffect(() => {
@@ -165,7 +217,7 @@ export default function Calendar() {
 
       if (daySelected && selectedEventId) {
         // Event selected - navigate between events and edit
-        const dayEvents = events
+        const dayEvents = visibleEvents
           .filter((ev) => ev.day === focusedDay)
           .sort((a, b) => a.startHour - b.startHour);
         const currentIndex = dayEvents.findIndex(
@@ -418,10 +470,11 @@ export default function Calendar() {
               "Cannot move to next day: time conflict with existing event",
             );
           } else {
-            updateEvent({ ...ev, day: targetDay });
-            // keep selection on moved event
-            setFocusedDay(targetDay);
-            setSelectedEventId(ev.id);
+            void updateEvent({ ...ev, day: targetDay }).then(() => {
+              // keep selection on moved event after the store is updated
+              setFocusedDay(targetDay);
+              setSelectedEventId(ev.id);
+            });
           }
         } else if (e.key === "k" || e.key === "K") {
           // move to previous weekday
@@ -442,9 +495,10 @@ export default function Calendar() {
               "Cannot move to previous day: time conflict with existing event",
             );
           } else {
-            updateEvent({ ...ev, day: targetDay });
-            setFocusedDay(targetDay);
-            setSelectedEventId(ev.id);
+            void updateEvent({ ...ev, day: targetDay }).then(() => {
+              setFocusedDay(targetDay);
+              setSelectedEventId(ev.id);
+            });
           }
         } else if (e.key === "t" || e.key === "T") {
           // enter time-adjust mode: next h/l will extend earlier/later by 30 minutes
@@ -484,7 +538,7 @@ export default function Calendar() {
         e.preventDefault();
         setDaySelected(true);
         // Focus on first event (sorted by start time) if any, otherwise stay in day mode
-        const dayEvents = events
+        const dayEvents = visibleEvents
           .filter((ev) => ev.day === focusedDay)
           .sort((a, b) => a.startHour - b.startHour);
         if (dayEvents.length > 0) {
@@ -508,6 +562,7 @@ export default function Calendar() {
     selectedEventId,
     daySelected,
     events,
+    visibleEvents,
     selectedSlot,
     editingDayIndex,
     creatingEvent,
@@ -543,6 +598,7 @@ export default function Calendar() {
       duration: 1,
       title: eventTitle,
       color: "bg-indigo-500",
+      tags: [],
     };
 
     try {
@@ -558,7 +614,7 @@ export default function Calendar() {
     }
   };
 
-  const addEventFromDialog = async (title: string) => {
+  const addEventFromDialog = async (title: string, tags: string[]) => {
     if (!creatingEvent) return;
     if (!title.trim()) return;
 
@@ -569,6 +625,7 @@ export default function Calendar() {
       duration: creatingEvent.duration,
       title,
       color: "bg-indigo-500",
+      tags,
     };
 
     try {
@@ -642,6 +699,9 @@ export default function Calendar() {
             duration: Math.max(0.5, ev.duration as number),
             title: (ev.title as string).trim() || "(no title)",
             color: typeof ev.color === "string" ? ev.color : "bg-indigo-500",
+            tags: Array.isArray(ev.tags)
+              ? normalizeTags(ev.tags as string[])
+              : [],
           });
         } else {
           invalid.push(i);
@@ -696,6 +756,14 @@ export default function Calendar() {
 
   return (
     <div className="max-w-full mx-auto">
+      <TagFilterBar
+        tags={allTags}
+        tagFilters={tagFilters}
+        onToggle={(tag, checked) =>
+          setTagFilters((prev) => ({ ...prev, [tag]: checked }))
+        }
+      />
+
       {/* Add Event Modal (from hour click) */}
       {selectedSlot && (
         <AddEventModal
@@ -712,7 +780,7 @@ export default function Calendar() {
       {/* Create Event Modal (from [n] key) */}
       {creatingEvent && (
         <CreateEventModal
-          onSave={(title) => addEventFromDialog(title)}
+          onSave={(title, tags) => addEventFromDialog(title, tags)}
           onCancel={() => setCreatingEvent(null)}
         />
       )}
@@ -721,10 +789,11 @@ export default function Calendar() {
       {editingDayIndex !== null && selectedEventId && (
         <EditEventModal
           event={events.find((e) => e.id === selectedEventId)!}
-          onSave={(title) =>
+          onSave={(title, tags) =>
             updateEvent({
               ...events.find((e) => e.id === selectedEventId)!,
               title,
+              tags,
             })
           }
           onCancel={() => setEditingDayIndex(null)}
@@ -749,7 +818,7 @@ export default function Calendar() {
       {/* Canvas Calendar Grid */}
       <CanvasCalendarGrid
         days={DAYS_OF_WEEK}
-        events={events}
+        events={visibleEvents}
         focusedDay={focusedDay}
         daySelected={daySelected}
         selectedEventId={daySelected ? selectedEventId : undefined}
@@ -771,7 +840,7 @@ export default function Calendar() {
             events, conflicts with existing events will be reported.
           </p>
           <p className="text-slate-400 text-xs mt-2">
-            {events.length} event{events.length !== 1 ? "s" : ""} scheduled
+            {visibleEvents.length} event{visibleEvents.length !== 1 ? "s" : ""} shown
           </p>
         </div>
       </div>
@@ -828,8 +897,6 @@ interface AddEventModalProps {
 }
 
 function AddEventModal({
-  day,
-  hour,
   title,
   onTitleChange,
   onSave,
@@ -875,7 +942,7 @@ function AddEventModal({
 }
 
 interface CreateEventModalProps {
-  onSave: (title: string) => void;
+  onSave: (title: string, tags: string[]) => void;
   onCancel: () => void;
 }
 
@@ -884,9 +951,10 @@ function CreateEventModal({
   onCancel,
 }: CreateEventModalProps) {
   const [title, setTitle] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
 
   const handleSave = () => {
-    onSave(title);
+    onSave(title, parseTagInput(tagsInput));
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -922,6 +990,20 @@ function CreateEventModal({
               autoFocus
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Tags
+            </label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="work, planning, review"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -930,7 +1012,7 @@ function CreateEventModal({
 
 interface EditEventModalProps {
   event: CalendarEvent;
-  onSave: (title: string) => void;
+  onSave: (title: string, tags: string[]) => void;
   onCancel: () => void;
 }
 
@@ -940,9 +1022,15 @@ function EditEventModal({
   onCancel,
 }: EditEventModalProps) {
   const [title, setTitle] = useState(event.title);
+  const [tagsInput, setTagsInput] = useState((event.tags ?? []).join(", "));
+
+  useEffect(() => {
+    setTitle(event.title);
+    setTagsInput((event.tags ?? []).join(", "));
+  }, [event.id, event.title, event.tags]);
 
   const handleSave = () => {
-    onSave(title);
+    onSave(title, parseTagInput(tagsInput));
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -975,6 +1063,20 @@ function EditEventModal({
               onKeyPress={handleKeyPress}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Tags
+            </label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="work, planning, review"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
           </div>
         </div>
