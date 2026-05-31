@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { CanvasCalendarGrid } from "../components/Calendar/CanvasCalendarGrid";
-import { MAX_HOUR, TIME_SLOTS } from "../components/Calendar/timeGrid";
+import { MIN_HOUR, MAX_HOUR, TIME_SLOTS } from "../components/Calendar/timeGrid";
 import { indexDBAPI } from "../utils/indexDBAPI";
 
 const DAYS_OF_WEEK = [
@@ -53,6 +53,9 @@ export default function Calendar() {
     hour: number;
     duration: number;
   } | null>(null);
+
+  // Temporary mode for time adjustment: after pressing 't', next 'h' or 'l' will extend event earlier/later
+  const [timeAdjustMode, setTimeAdjustMode] = useState(false);
 
   // Delete confirmation dialog
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | undefined>();
@@ -171,6 +174,68 @@ export default function Calendar() {
         const currentIndex = dayEvents.findIndex(
           (ev) => ev.id === selectedEventId,
         );
+        const currentEvent = dayEvents[currentIndex];
+        if (!currentEvent) return;
+
+        // If time-adjust mode is active, handle extending earlier/later
+        if (timeAdjustMode) {
+          if (e.key === "h" || e.key === "H") {
+            e.preventDefault();
+            // extend earlier by up to 0.5 hours, bounded by MIN_HOUR and previous events
+            const desiredStart = currentEvent.startHour - 0.5;
+            // compute latest allowed start (can't overlap previous events)
+            let latestAllowedStart = MIN_HOUR;
+            for (const ev of dayEvents) {
+              if (ev.id === currentEvent.id) break;
+              latestAllowedStart = Math.max(
+                latestAllowedStart,
+                ev.startHour + ev.duration,
+              );
+            }
+            const newStart = Math.max(latestAllowedStart, desiredStart);
+            if (newStart === currentEvent.startHour) {
+              toast.error("Cannot extend earlier (boundary or conflict)");
+            } else {
+              const newDuration = currentEvent.duration +
+                (currentEvent.startHour - newStart);
+              const updated = {
+                ...currentEvent,
+                startHour: newStart,
+                duration: Math.round(newDuration * 100) / 100,
+              };
+              updateEvent(updated);
+            }
+            setTimeAdjustMode(false);
+            return;
+          } else if (e.key === "l" || e.key === "L") {
+            e.preventDefault();
+            // extend later by up to 0.5 hours, bounded by MAX_HOUR and next events
+            const desiredEnd = currentEvent.startHour + currentEvent.duration + 0.5;
+            const endLimit = MAX_HOUR;
+            let earliestNextStart = endLimit;
+            for (const ev of dayEvents) {
+              if (ev.startHour <= currentEvent.startHour) continue;
+              earliestNextStart = Math.min(earliestNextStart, ev.startHour);
+            }
+            const newEnd = Math.min(earliestNextStart, desiredEnd, endLimit);
+            if (newEnd === currentEvent.startHour + currentEvent.duration) {
+              toast.error("Cannot extend later (boundary or conflict)");
+            } else {
+              const newDuration = Math.round((newEnd - currentEvent.startHour) * 100) / 100;
+              const updated = {
+                ...currentEvent,
+                duration: newDuration,
+              };
+              updateEvent(updated);
+            }
+            setTimeAdjustMode(false);
+            return;
+          } else {
+            // any other key cancels the time adjust mode
+            setTimeAdjustMode(false);
+            return;
+          }
+        }
 
         if (e.key === "ArrowRight" || e.key === "ArrowDown") {
           e.preventDefault();
@@ -193,6 +258,83 @@ export default function Calendar() {
         } else if (e.key === "n" || e.key === "N") {
           e.preventDefault();
           setCreatingEvent({ day: focusedDay, hour: 9, duration: 1 });
+        } else if (e.key === "h" || e.key === "H") {
+          // move event earlier by 0.5h with bounding
+          e.preventDefault();
+          const ev = currentEvent;
+          let newStart = Math.max(ev.startHour - 0.5, MIN_HOUR);
+          // ensure not overlapping previous event
+          let prevEnd = MIN_HOUR;
+          for (const o of dayEvents) {
+            if (o.id === ev.id) break;
+            prevEnd = Math.max(prevEnd, o.startHour + o.duration);
+          }
+          if (newStart < prevEnd) newStart = prevEnd;
+          if (newStart === ev.startHour) {
+            toast.error("Cannot move earlier (boundary or conflict)");
+          } else {
+            updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
+          }
+        } else if (e.key === "l" || e.key === "L") {
+          // move event later by 3 minutes with bounding
+          e.preventDefault();
+          const ev = currentEvent;
+          const delta = 3 / 60; // 3 minutes in hours
+          let newStart = ev.startHour + delta;
+          const maxStart = MAX_HOUR - ev.duration;
+          if (newStart > maxStart) newStart = maxStart;
+          // ensure not overlapping next event
+          const next = dayEvents.find((o) => o.startHour > ev.startHour);
+          if (next && newStart + ev.duration > next.startHour) {
+            newStart = next.startHour - ev.duration;
+          }
+          if (newStart === ev.startHour) {
+            toast.error("Cannot move later (boundary or conflict)");
+          } else {
+            updateEvent({ ...ev, startHour: Math.round(newStart * 100) / 100 });
+          }
+        } else if (e.key === "j" || e.key === "J") {
+          // move to next weekday
+          e.preventDefault();
+          const ev = currentEvent;
+          const targetDay = (ev.day + 1) % 7;
+          const conflicts = events.filter(
+            (o) =>
+              o.day === targetDay &&
+              !(o.startHour + o.duration <= ev.startHour ||
+                o.startHour >= ev.startHour + ev.duration),
+          );
+          if (conflicts.length > 0) {
+            toast.error("Cannot move to next day: time conflict with existing event");
+          } else {
+            updateEvent({ ...ev, day: targetDay });
+            // keep selection on moved event
+            setFocusedDay(targetDay);
+            setSelectedEventId(ev.id);
+          }
+        } else if (e.key === "k" || e.key === "K") {
+          // move to previous weekday
+          e.preventDefault();
+          const ev = currentEvent;
+          const targetDay = ev.day - 1 < 0 ? DAYS_OF_WEEK.length - 1 : ev.day - 1;
+          const conflicts = events.filter(
+            (o) =>
+              o.day === targetDay &&
+              !(o.startHour + o.duration <= ev.startHour ||
+                o.startHour >= ev.startHour + ev.duration),
+          );
+          if (conflicts.length > 0) {
+            toast.error("Cannot move to previous day: time conflict with existing event");
+          } else {
+            updateEvent({ ...ev, day: targetDay });
+            setFocusedDay(targetDay);
+            setSelectedEventId(ev.id);
+          }
+        } else if (e.key === "t" || e.key === "T") {
+          // enter time-adjust mode: next h/l will extend earlier/later by 30 minutes
+          e.preventDefault();
+          setTimeAdjustMode(true);
+          toast('Time adjust: press H to extend earlier, L to extend later');
         } else if (e.key === "Escape") {
           e.preventDefault();
           setSelectedEventId(undefined);
@@ -560,11 +702,10 @@ export default function Calendar() {
       <div className="mt-6 p-4 bg-slate-900 border border-slate-700">
         <div className="text-sm text-slate-300 space-y-1">
           <p>
-            <strong>Keyboard:</strong> ↑↓ days, enter select, n new, space edit,
-            d delete
+            <strong>Keyboard:</strong> ↑/↓ days, Enter select, n new, space edit, d delete, h -30min, l +3min, j next day, k prev day, t then h/l extend by 30min
           </p>
           <p className="text-slate-400 text-xs mt-2">
-            arrow navigate events, esc back
+            Arrow keys navigate events, Esc to go back. On moving/creating events, conflicts with existing events will be reported.
           </p>
           <p className="text-slate-400 text-xs mt-2">
             {events.length} event{events.length !== 1 ? "s" : ""} scheduled
