@@ -152,8 +152,10 @@ export default function Today() {
 
   const focusTimeline = () => {
     setFocusMode("timeline");
-    if (!selectedEventId && todayEvents[0]) {
-      setSelectedEventId(todayEvents[0].id);
+    const targetId = selectedEventId ?? todayEvents[0]?.id;
+    if (targetId) {
+      setSelectedEventId(targetId);
+      window.setTimeout(() => eventRefs.current[targetId]?.focus(), 0);
     }
   };
 
@@ -200,7 +202,7 @@ export default function Today() {
         if (e.key === "Escape") {
           e.preventDefault();
           noteRef.current?.blur();
-          setFocusMode(null);
+          focusTimeline();
         }
         return;
       }
@@ -221,6 +223,11 @@ export default function Today() {
         const currentIndex = todayEvents.findIndex(
           (event) => event.id === selectedEventId,
         );
+        if (e.key === "Enter") {
+          e.preventDefault();
+          focusNote();
+          return;
+        }
         if (e.key === "j" || e.key === "J") {
           e.preventDefault();
           if (currentIndex < todayEvents.length - 1) {
@@ -526,8 +533,8 @@ export default function Today() {
       </div>
 
       <div className="mt-4 border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-        <strong>Keyboard:</strong> t focus timeline, j/k move timeline event,
-        n focus note, esc blur note
+        <strong>Keyboard:</strong> t focus timeline, enter focus note, j/k move
+        timeline event, n focus note, esc return to timeline
       </div>
     </div>
   );
