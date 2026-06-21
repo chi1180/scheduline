@@ -8,17 +8,25 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            archive: scheduline-linux-x64.zip
+          - os: windows-latest
+            archive: scheduline-win-x64.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run build:prod
+      - run: |
+          cd build
+          zip -r ../${{ matrix.archive }} .
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
-          name: scheduline-${{ runner.os }}
-          path: build/
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
 
   release:
     needs: build
@@ -28,9 +36,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: scheduline-*
+          pattern: "scheduline-*.zip"
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: "**/*"
+          files: "scheduline-*.zip"
           generate_release_notes: true
