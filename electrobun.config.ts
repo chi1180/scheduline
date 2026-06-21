@@ -12,17 +12,14 @@ export default {
       "dist/index.html": "views/mainview/index.html",
       "dist/assets": "views/mainview/assets",
     },
-    // Ignore Vite output in watch mode — HMR handles view rebuilds separately
     watchIgnore: ["dist/**"],
-    mac: {
-      bundleCEF: false,
-    },
     linux: {
       bundleCEF: false,
       icon: "./assets/icon.png",
     },
     win: {
       bundleCEF: false,
+      icon: "./assets/icon.ico",
     },
   },
 } satisfies ElectrobunConfig;
