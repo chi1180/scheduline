@@ -22,4 +22,7 @@ export default {
       icon: "./assets/icon.ico",
     },
   },
+  release: {
+    baseUrl: "https://github.com/chi1180/scheduline/releases/latest/download",
+  },
 } satisfies ElectrobunConfig;
